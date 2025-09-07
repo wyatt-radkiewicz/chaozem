@@ -61,6 +61,84 @@ pub const Bus = struct {
     };
 };
 
+/// Updates condition flags
+fn Flags(comptime flags: struct {
+    c: Flag = .keep,
+    v: Flag = .keep,
+    z: Flag = .keep,
+    n: Flag = .keep,
+    x: Flag = .keep,
+}) type {
+    const FlagName = enum { c, v, z, n, x };
+    return struct {
+        pub fn apply(status: *Cpu.Status, updates: anytype) void {
+            var set: u5 = @intFromBool(flags.c.mask(.set)) << 0 |
+                @intFromBool(flags.v.mask(.set)) << 1 |
+                @intFromBool(flags.z.mask(.set)) << 2 |
+                @intFromBool(flags.n.mask(.set)) << 3 |
+                @intFromBool(flags.x.mask(.set)) << 4;
+            var mask: u5 = @intFromBool(flags.c.mask(.overwrite)) << 0 |
+                @intFromBool(flags.v.mask(.overwrite)) << 1 |
+                @intFromBool(flags.z.mask(.overwrite)) << 2 |
+                @intFromBool(flags.n.mask(.overwrite)) << 3 |
+                @intFromBool(flags.x.mask(.overwrite)) << 4;
+            inline for (std.meta.fieldNames(updates)) |flag| {
+                switch (@field(flags, flag)) {
+                    .set => set |= @as(u5, @intFromBool(@field(updates, flag))) <<
+                        @intFromEnum(@field(FlagName, flag)),
+                    .clr => mask |= @as(u5, @intFromBool(!@field(updates, flag))) <<
+                        @intFromEnum(@field(FlagName, flag)),
+                    else => @compileError("Unneeded flag given"),
+                }
+            }
+
+            status.* = @bitCast(@as(u16, @bitCast(status.*)) & ~@as(u16, mask) | set);
+
+            inline for (std.meta.fieldNames(flags)) |flag| {
+                switch (@field(flags, flag)) {
+                    .c, .v, .z, .n, .x => |copy| {
+                        const bits: u16 = @bitCast(status.*);
+                        const src = @intFromEnum(@field(FlagName, @tagName(copy)));
+                        const dst = @intFromEnum(@field(FlagName, flag));
+                        status.* = bits & ~@as(u16, 1 << dst) |
+                            (@as(u16, @as(u1, @truncate(bits >> src))) << dst);
+                    },
+                    else => {},
+                }
+            }
+        }
+    };
+}
+
+/// What updates to do for the flags
+const Flag = enum {
+    /// Do nothing, set to zero, or one always
+    keep,
+    zero,
+    one,
+
+    /// Copy another flag given in the updates list
+    c,
+    v,
+    z,
+    n,
+    x,
+
+    /// Set it or clear
+    set,
+
+    /// Clear it or do nothing
+    clr,
+
+    /// Default bit for a mask
+    fn mask(this: @This(), usage: enum { set, overwrite }) bool {
+        return switch (usage) {
+            .set => this == .zero,
+            .overwrite => this != .keep,
+        };
+    }
+};
+
 /// A M68K instruction definition
 const Instr = struct {
     /// Name of the instruction
@@ -529,6 +607,36 @@ fn EaTarget(m: u4, n: u4) type {
     };
 }
 
+/// Normal addition operation
+const Add = struct {
+    fn op(
+        exec: *Exec,
+        comptime size: Size,
+        src: size.Int(.unsigned),
+        dst: size.Int(.unsigned),
+    ) size.Int(.unsigned) {
+        const sum = src +% dst;
+        const overflow = @addWithOverflow(
+            @as(size.Int(.signed), @bitCast(src)),
+            @as(size.Int(.signed), @bitCast(dst)),
+        )[1] == 1;
+        const carry = @addWithOverflow(src, dst)[1] == 1;
+        Flags(.{
+            .x = .c,
+            .n = .set,
+            .z = .set,
+            .v = .set,
+            .c = .set,
+        }).apply(&exec.cpu.status, .{
+            .n = negative(sum),
+            .z = sum == 0,
+            .v = overflow,
+            .c = carry,
+        });
+        return sum;
+    }
+};
+
 /// Matches opcodes to instruction permutations
 const Matcher = struct {
     perms: []const Instr.Spec,
@@ -741,4 +849,9 @@ fn overwrite(int: anytype, with: anytype) @TypeOf(int) {
     const Int = std.meta.int(.unsigned, @bitSizeOf(@TypeOf(int)));
     const mask: @TypeOf(Int) = (1 << @bitSizeOf(@TypeOf(with))) - 1;
     return int & ~mask | with;
+}
+
+/// Returns true if the int has the highest bit set
+fn negative(int: anytype) bool {
+    return @as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(int))), @bitCast(int)) < 0;
 }
