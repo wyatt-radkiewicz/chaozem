@@ -1,0 +1,85 @@
+X — Set the same as the carry bit.
+N — Undefined.
+Z — Cleared if the result is nonzero; unchanged otherwise.
+V — Undefined.
+C — Set if a decimal carry was generated; cleared otherwise.
+
+X — Set the same as the carry bit.
+N — Set if the result is negative; cleared otherwise.
+Z — Set if the result is zero; cleared otherwise.
+V — Set if an overflow is generated; cleared otherwise.
+C — Set if a carry is generated; cleared otherwise.
+
+Not affected.
+
+X — Set the same as the carry bit.
+N — Set if the result is negative; cleared otherwise.
+Z — Cleared if the result is nonzero; unchanged otherwise.
+V — Set if an overflow occurs; cleared otherwise.
+C — Set if a carry is generated; cleared otherwise.
+
+X — Not affected.
+N — Set if the most significant bit of the result is set; cleared otherwise.
+Z — Set if the result is zero; cleared otherwise.
+V — Always cleared.
+C — Always cleared.
+
+X — Cleared if bit 4 of immediate operand is zero; unchanged otherwise.
+N — Cleared if bit 3 of immediate operand is zero; unchanged otherwise.
+Z — Cleared if bit 2 of immediate operand is zero; unchanged otherwise.
+V — Cleared if bit 1 of immediate operand is zero; unchanged otherwise.
+C — Cleared if bit 0 of immediate operand is zero; unchanged otherwise.
+
+X — Set according to the last bit shifted out of the operand; unaffected for a shift count of zero.
+N — Set if the most significant bit of the result is set; cleared otherwise.
+Z — Set if the result is zero; cleared otherwise.
+V — Set if the most significant bit is changed at any time during the shift operation; cleared otherwise.
+C — Set according to the last bit shifted out of the operand; cleared for a shift count of zero.
+
+X — Not affected.
+N — Not affected.
+Z — Set if the bit tested is zero; cleared otherwise.
+V — Not affected.
+C — Not affected.
+
+X — Not affected.
+N — Set if the result is negative; cleared otherwise.
+Z — Set if the result is zero; cleared otherwise.
+V — Set if an overflow is generated; cleared otherwise.
+C — Set if a borrow is generated; cleared otherwise.
+
+X — Not affected.
+N — Set if Dn < 0; cleared if Dn > effective address operand; undefined otherwise.
+Z — Undefined.
+V — Undefined.
+C — Undefined.
+
+X — Not affected.
+N — Always cleared.
+Z — Always set.
+V — Always cleared.
+C — Always cleared.
+
+X — Set the same as the carry bit.
+N — Undefined.
+Z — Cleared if the result is nonzero; unchanged otherwise.
+V — Undefined.
+C — Set if a borrow (decimal) is generated; cleared otherwise.
+
+X — Set the same as the carry bit.
+N — Set if the result is negative; cleared otherwise.
+Z — Cleared if the result is nonzero; unchanged otherwise.
+V — Set if an overflow occurs; cleared otherwise.
+C — Set if a borrow occurs; cleared otherwise.
+
+X — Not affected.
+N — Set if the most significant bit of the 32-bit result is set; cleared otherwise.
+Z — Set if the 32-bit result is zero; cleared otherwise.
+V — Always cleared.
+C — Always cleared.
+
+X — Not affected.
+N — Set if the most significant bit of the operand is currently set; cleared otherwise.
+Z — Set if the operand was zero; cleared otherwise.
+V — Always cleared.
+C — Always cleared.
