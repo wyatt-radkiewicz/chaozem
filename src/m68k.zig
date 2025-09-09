@@ -1,7 +1,7 @@
 const std = @import("std");
 
 cpu: *Cpu,
-bus: Bus,
+bus: *Bus,
 clk: usize = 0,
 
 /// M68K execution context
@@ -30,7 +30,7 @@ pub const Cpu = struct {
         n: bool = false,
         /// Extend
         x: bool = false,
-        _pad0: u2 = 0,
+        _pad0: u3 = 0,
         /// Interrupt priority level
         ipl: u3 = 0,
         _pad1: u1 = 0,
@@ -45,20 +45,275 @@ pub const Cpu = struct {
 
 /// M68K bus interface
 pub const Bus = struct {
-    ptr: *anyopaque,
-    vtable: *const VTable,
+    /// Read byte/word/long
+    rdb: *const fn (bus: *@This(), addr: u32) u8,
+    rdw: *const fn (bus: *@This(), addr: u32) u16,
+    rdl: *const fn (bus: *@This(), addr: u32) u32,
 
-    pub const VTable = struct {
-        /// Read byte/word/long
-        rdb: *const fn (ptr: *anyopaque, addr: u32) u8,
-        rdw: *const fn (ptr: *anyopaque, addr: u32) u16,
-        rdl: *const fn (ptr: *anyopaque, addr: u32) u32,
+    /// Write byte/word/long
+    wrb: *const fn (bus: *@This(), addr: u32, data: u8) void,
+    wrw: *const fn (bus: *@This(), addr: u32, data: u16) void,
+    wrl: *const fn (bus: *@This(), addr: u32, data: u32) void,
 
-        /// Write byte/word/long
-        wrb: *const fn (ptr: *anyopaque, addr: u32, data: u8) void,
-        wrw: *const fn (ptr: *anyopaque, addr: u32, data: u16) void,
-        wrl: *const fn (ptr: *anyopaque, addr: u32, data: u32) void,
+    /// Create a reader at a certain position
+    pub fn reader(this: *@This(), addr: u32, buffer: []u8) Reader {
+        return .{
+            .bus = this,
+            .addr = addr,
+            .interface = .{
+                .vtable = &.{ .stream = Reader.stream },
+                .buffer = buffer,
+                .seek = 0,
+                .end = 0,
+            },
+        };
+    }
+
+    /// Interface to read
+    const Reader = struct {
+        bus: *Bus,
+        addr: u32,
+        interface: std.io.Reader,
+
+        /// Standard reader interface function
+        fn stream(
+            io_reader: *std.Io.Reader,
+            w: *std.Io.Writer,
+            limit: std.Io.Limit,
+        ) std.Io.Reader.StreamError!usize {
+            const this: *@This() = @alignCast(@fieldParentPtr("interface", io_reader));
+            var len: usize = 0;
+            for (limit.slice(try w.writableSliceGreedy(1))) |*dest_byte| {
+                dest_byte.* = this.bus.rdb(this.bus, this.addr);
+                this.addr += 1;
+                len += 1;
+            }
+            return len;
+        }
     };
+};
+
+/// Run one instruction
+pub fn step(cpu: *Cpu, bus: *Bus) usize {
+    var exec = Exec{
+        .cpu = cpu,
+        .bus = bus,
+    };
+    const opcode = fetch(&exec, u16);
+    if (isa.handler(opcode)) |pfn| {
+        pfn(opcode, &exec);
+    }
+    return exec.clk;
+}
+
+/// Disassemble one instruction
+const Disasm = struct {
+    reader: *std.io.Reader,
+
+    pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+        const opcode = this.reader.takeInt(u16, .big) catch return error.WriteFailed;
+        if (isa.disasm(opcode)) |pfn| {
+            try pfn(writer, this.reader);
+        } else {
+            try writer.print("<invalid opcode>", .{});
+        }
+    }
+};
+
+/// M68k instruction set architecture
+const isa = Isa(&.{
+    Instr{
+        .name = "add",
+        .enc = .init("1101xxx0xxxxxxxx"),
+        .src = EaTarget(3, 0),
+        .dst = DataTarget(9),
+        .op = Add,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "add",
+        .enc = .init("1101xxx1xxxxxxxx"),
+        .src = DataTarget(9),
+        .dst = EaTarget(3, 0),
+        .op = Add,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+});
+
+/// A M68K instruction definition
+const Instr = struct {
+    /// Name of the instruction
+    name: []const u8,
+    /// Opcode's encoding
+    enc: Opcode,
+    /// Source of the instruction
+    src: ?type = null,
+    /// Destination of the instruction
+    dst: ?type = null,
+    /// What operation to perform
+    op: ?type = null,
+    /// The size(s) of the instruction
+    size: ?Size.Enc = null,
+
+    /// Runtime operand
+    fn Operand(comptime Target: type, comptime size: ?Size) type {
+        return struct {
+            operand: Target,
+            data: Data,
+
+            const Data = switch (@typeInfo(@TypeOf(Target.Data)).@"fn".params[0].type orelse
+                void) {
+                Size => Target.Data(size orelse @compileError("Expected size for operand!")),
+                ?Size => Target.Data(size),
+                else => @compileError("Expected size parameter"),
+            };
+
+            fn init(exec: *Exec, opcode: u16) @This() {
+                const InitParam = @typeInfo(@TypeOf(Target.init)).@"fn".params[1].type orelse void;
+                var operand = switch (InitParam) {
+                    Size => Target.init(exec, size orelse unreachable, opcode),
+                    ?Size => Target.init(exec, size, opcode),
+                    else => @compileError("Expected size parameter"),
+                };
+                const LoadParam = @typeInfo(@TypeOf(Target.load)).@"fn".params[2].type orelse void;
+                const data = switch (LoadParam) {
+                    Size => operand.load(exec, size orelse unreachable, opcode),
+                    ?Size => operand.load(exec, size, opcode),
+                    else => @compileError("Expected size parameter"),
+                };
+                return .{
+                    .operand = operand,
+                    .data = data,
+                };
+            }
+
+            fn store(this: *@This(), exec: *Exec, opcode: u16, data: Data) void {
+                const Param = @typeInfo(@TypeOf(Target.store)).@"fn".params[2].type orelse void;
+                switch (Param) {
+                    Size => this.operand.store(exec, size orelse unreachable, opcode, data),
+                    ?Size => this.operand.store(exec, size, opcode, data),
+                    else => @compileError("Expected size parameter"),
+                }
+            }
+        };
+    }
+
+    /// Instruction specialization
+    const Spec = struct {
+        enc: Opcode,
+        run: *const fn (u16, *Exec) void,
+        disasm: *const fn (*std.io.Writer, *std.io.Reader) std.io.Writer.Error!void,
+
+        fn init(comptime instr: Instr, comptime size: ?Size) @This() {
+            const enc = if (instr.size) |enc| switch (enc) {
+                .fixed => instr.enc,
+                .dyn => |dyn| instr.enc.overwrite(dyn.at, enc.encode(size orelse
+                    @compileError("Expected size for instruction"))),
+            } else instr.enc;
+            return .{
+                .enc = enc,
+                .run = struct {
+                    pub fn run(opcode: u16, exec: *Exec) void {
+                        if (instr.src) |Src| {
+                            const SrcOp = Operand(Src, size);
+                            if (instr.dst) |Dst| {
+                                const DstOp = Operand(Dst, size);
+                                const src = SrcOp.init(exec, opcode);
+                                var dst = DstOp.init(exec, opcode);
+                                const result = instr.runop(SrcOp.Data, size, exec, .{
+                                    src.data,
+                                    dst.data,
+                                });
+                                dst.store(exec, opcode, result);
+                            } else {
+                                const src = SrcOp.init(exec, opcode);
+                                _ = instr.runop(SrcOp.Data, size, exec, .{src.data});
+                            }
+                        } else if (instr.dst) |Dst| {
+                            const DstOp = Operand(Dst, size);
+                            var dst = DstOp.init(exec, opcode);
+                            const result = instr.runop(DstOp.Data, size, exec, .{dst.data});
+                            dst.store(exec, opcode, result);
+                        } else {
+                            const Data = if (size) |s| s.Int(.unsigned) else void;
+                            _ = instr.runop(Data, size, exec, .{});
+                        }
+                    }
+                }.run,
+                .disasm = struct {
+                    fn disasm(
+                        writer: *std.io.Writer,
+                        reader: *std.io.Reader,
+                    ) std.io.Writer.Error!void {
+                        const opcode = reader.takeInt(u16, .big) catch return error.WriteFailed;
+                        _ = try writer.write(instr.name);
+                        if (size) |s| switch (instr.size orelse .{ .fixed = .l }) {
+                            .fixed => {},
+                            .dyn => try writer.print(".{s}", .{@tagName(s)}),
+                        };
+                        if (instr.src) |src| {
+                            if (instr.dst) |dst| {
+                                try writer.print(" {f},{f}", .{ src.Disasm(size orelse unreachable){
+                                    .reader = reader,
+                                    .opcode = opcode,
+                                }, dst.Disasm(size orelse unreachable){
+                                    .reader = reader,
+                                    .opcode = opcode,
+                                } });
+                            } else {
+                                try writer.print(" {f}", .{src.Disasm(size orelse unreachable){
+                                    .reader = reader,
+                                    .opcode = opcode,
+                                }});
+                            }
+                        } else if (instr.dst) |dst| {
+                            try writer.print(" {f}", .{dst.Disasm(size orelse unreachable){
+                                .reader = reader,
+                                .opcode = opcode,
+                            }});
+                        }
+                    }
+                }.disasm,
+            };
+        }
+    };
+
+    /// Get all instruction permutations for this
+    fn specializations(comptime this: @This()) []const Spec {
+        var buffer: [std.meta.fields(Size).len]Spec = undefined;
+        var perms = std.ArrayList(Spec).initBuffer(&buffer);
+        if (this.size) |enc| {
+            switch (enc) {
+                .fixed => |size| perms.appendAssumeCapacity(.init(this, size)),
+                .dyn => |x| for (std.meta.fieldNames(@TypeOf(x))) |field| {
+                    if (@FieldType(@TypeOf(x), field) == ?comptime_int) {
+                        perms.appendAssumeCapacity(.init(this, @field(Size, field)));
+                    }
+                },
+            }
+        } else {
+            perms.appendAssumeCapacity(.init(this, null));
+        }
+        const final = buffer;
+        return final[0..perms.items.len];
+    }
+
+    /// Run the operation handler
+    fn runop(
+        comptime this: @This(),
+        comptime Result: type,
+        comptime size: ?Size,
+        exec: *Exec,
+        targets: anytype,
+    ) Result {
+        const Op = this.op orelse return if (targets.len > 0) targets[targets.len - 1] else {};
+        const Param = @typeInfo(@TypeOf(Op.op)).@"fn".params[1].type orelse
+            @panic("Expected size as second parameter");
+        return @call(.auto, Op.op, .{
+            exec,
+            if (Param == Size) size orelse @panic("Expected size for instruction target") else size,
+        } ++ targets);
+    }
 };
 
 /// Updates condition flags
@@ -72,17 +327,17 @@ fn Flags(comptime flags: struct {
     const FlagName = enum { c, v, z, n, x };
     return struct {
         pub fn apply(status: *Cpu.Status, updates: anytype) void {
-            var set: u5 = @intFromBool(flags.c.mask(.set)) << 0 |
-                @intFromBool(flags.v.mask(.set)) << 1 |
-                @intFromBool(flags.z.mask(.set)) << 2 |
-                @intFromBool(flags.n.mask(.set)) << 3 |
-                @intFromBool(flags.x.mask(.set)) << 4;
-            var mask: u5 = @intFromBool(flags.c.mask(.overwrite)) << 0 |
-                @intFromBool(flags.v.mask(.overwrite)) << 1 |
-                @intFromBool(flags.z.mask(.overwrite)) << 2 |
-                @intFromBool(flags.n.mask(.overwrite)) << 3 |
-                @intFromBool(flags.x.mask(.overwrite)) << 4;
-            inline for (std.meta.fieldNames(updates)) |flag| {
+            var set = @as(u5, @intFromBool(flags.c.mask(.set))) << 0 |
+                @as(u5, @intFromBool(flags.v.mask(.set))) << 1 |
+                @as(u5, @intFromBool(flags.z.mask(.set))) << 2 |
+                @as(u5, @intFromBool(flags.n.mask(.set))) << 3 |
+                @as(u5, @intFromBool(flags.x.mask(.set))) << 4;
+            var mask = @as(u5, @intFromBool(flags.c.mask(.overwrite))) << 0 |
+                @as(u5, @intFromBool(flags.v.mask(.overwrite))) << 1 |
+                @as(u5, @intFromBool(flags.z.mask(.overwrite))) << 2 |
+                @as(u5, @intFromBool(flags.n.mask(.overwrite))) << 3 |
+                @as(u5, @intFromBool(flags.x.mask(.overwrite))) << 4;
+            inline for (comptime std.meta.fieldNames(@TypeOf(updates))) |flag| {
                 switch (@field(flags, flag)) {
                     .set => set |= @as(u5, @intFromBool(@field(updates, flag))) <<
                         @intFromEnum(@field(FlagName, flag)),
@@ -94,14 +349,14 @@ fn Flags(comptime flags: struct {
 
             status.* = @bitCast(@as(u16, @bitCast(status.*)) & ~@as(u16, mask) | set);
 
-            inline for (std.meta.fieldNames(flags)) |flag| {
+            inline for (comptime std.meta.fieldNames(@TypeOf(flags))) |flag| {
                 switch (@field(flags, flag)) {
                     .c, .v, .z, .n, .x => |copy| {
                         const bits: u16 = @bitCast(status.*);
                         const src = @intFromEnum(@field(FlagName, @tagName(copy)));
                         const dst = @intFromEnum(@field(FlagName, flag));
-                        status.* = bits & ~@as(u16, 1 << dst) |
-                            (@as(u16, @as(u1, @truncate(bits >> src))) << dst);
+                        status.* = @bitCast(bits & ~@as(u16, 1 << dst) |
+                            (@as(u16, @as(u1, @truncate(bits >> src))) << dst));
                     },
                     else => {},
                 }
@@ -139,135 +394,6 @@ const Flag = enum {
     }
 };
 
-/// A M68K instruction definition
-const Instr = struct {
-    /// Name of the instruction
-    name: []const u8,
-    /// Opcode's encoding
-    enc: Opcode,
-    /// What operand to evaluate first
-    eval_first: enum { src, dst } = .src,
-    /// Source operand
-    src: type = void,
-    /// Destination operand
-    dst: type = void,
-    /// What operation to perform
-    op: type = void,
-    /// The size(s) of the instruction
-    size: ?Size.Enc = null,
-
-    /// Instruction specialization
-    const Spec = struct {
-        enc: Opcode,
-        run: *const fn (u16, *Exec) void,
-        disasm: *const fn (*std.io.Writer, *std.io.Reader) anyerror!void,
-
-        fn init(comptime instr: Instr, comptime size: ?Size) @This() {
-            const size_mask: u16 = if (instr.size) |enc| switch (enc) {
-                .fixed => 0,
-                .dyn => |x| @as(u16, (1 << @bitSizeOf(std.math.IntFittingRange(0, @max(
-                    x.b orelse 0,
-                    x.w orelse 0,
-                    x.l orelse 0,
-                )))) - 1) << x.at,
-            } else 0;
-            const spec_opcode = Opcode{
-                .set = instr.enc.set & ~size_mask | if (instr.size) |enc| switch (enc) {
-                    .fixed => 0,
-                    .dyn => |x| @field(x, @tagName(size orelse unreachable)) << x.at,
-                } else 0,
-                .any = instr.enc.any & ~size_mask,
-            };
-            return .{
-                .opcode = spec_opcode,
-                .run = struct {
-                    pub fn run(opcode: u16, exec: *Exec) void {
-                        var operands: struct {
-                            src: instr.src,
-                            dst: instr.dst,
-                        } = undefined;
-                        var sources: struct {
-                            src: switch (instr.src) {
-                                void => void,
-                                else => @typeInfo(instr.src.load).@"fn".return_type orelse void,
-                            },
-                            dst: switch (instr.dst) {
-                                void => void,
-                                else => @typeInfo(instr.dst.load).@"fn".return_type orelse void,
-                            },
-                        } = undefined;
-                        inline for (switch (instr.eval_first) {
-                            .src => &.{ "src", "dst" },
-                            .dst => &.{ "dst", "src" },
-                        }) |field| {
-                            if (@field(instr, field) != void) {
-                                @field(operands, field) = .init(exec, size, opcode);
-                                @field(sources, field) = @field(operands, field)
-                                    .load(exec, size, opcode);
-                            }
-                        }
-                        const result = if (instr.op != void)
-                            instr.op.op(exec, size, sources.src, sources.dst)
-                        else if (@TypeOf(sources.src) != void) sources.src else sources.dst;
-                        if (instr.dst != void) {
-                            operands.dst.store(exec, size, opcode, result);
-                        }
-                    }
-                }.run,
-                .disasm = struct {
-                    fn disasm(writer: *std.io.Writer, reader: *std.io.Reader) !void {
-                        const opcode = try reader.takeInt(u16, .big);
-                        if (spec_opcode.match(opcode)) {
-                            try writer.write(instr.name);
-                        } else {
-                            return error.InvalidEncoding;
-                        }
-                        if (size) |s| switch (s) {
-                            .fixed => {},
-                            .dyn => try writer.print(".{s}", .{@tagName(s)}),
-                        };
-                        switch (@as(u2, @intFromBool(instr.src != void)) |
-                            @as(u2, @intFromBool(instr.dst != void)) << 1) {
-                            0b00 => {},
-                            0b01 => try writer.print(" {f}", .{instr.src.Disasm(size){
-                                .reader = reader,
-                                .opcode = opcode,
-                            }}),
-                            0b01 => try writer.print(" {f}", .{instr.dst.Disasm(size){
-                                .reader = reader,
-                                .opcode = opcode,
-                            }}),
-                            0b11 => try writer.print(" {f},{f}", .{ instr.src.Disasm(size){
-                                .reader = reader,
-                                .opcode = opcode,
-                            }, instr.dst.Disasm(size){
-                                .reader = reader,
-                                .opcode = opcode,
-                            } }),
-                        }
-                    }
-                }.disasm,
-            };
-        }
-    };
-
-    /// Get all instruction permutations for this
-    fn specializations(comptime this: @This()) []const Spec {
-        var buffer: [std.meta.fields(Size).len]Spec = undefined;
-        var perms = std.ArrayList(Spec).initBuffer(&buffer);
-        switch (this.size) {
-            .fixed => |size| perms.appendAssumeCapacity(.init(this, size)),
-            .dyn => |x| for (std.meta.fieldNames(x)) |field| {
-                if (@FieldType(@TypeOf(x), field) == ?comptime_int) {
-                    perms.appendAssumeCapacity(.init(this, @field(Size, field)));
-                }
-            },
-        }
-        const final = buffer;
-        return final[0..perms.items.len];
-    }
-};
-
 /// M68K operation sizes
 const Size = enum {
     /// Byte
@@ -297,20 +423,24 @@ const Size = enum {
         fixed: Size,
         /// Size determined from bits at a position in the opcode
         dyn: struct {
-            at: comptime_int = null,
+            at: comptime_int,
             b: ?comptime_int = null,
             w: ?comptime_int = null,
             l: ?comptime_int = null,
         },
+
+        /// Gets the integer type used to represent the size
+        fn Type(comptime this: @This()) type {
+            return std.math.IntFittingRange(0, this.biggestEncoding() orelse 0);
+        }
 
         /// Decodes a size, and returns null if there was no encoding for the bits given
         fn decode(comptime this: @This(), opcode: u16) ?Size {
             return switch (this) {
                 .fixed => |size| size,
                 .dyn => |enc| blk: {
-                    const highest_encoding = @max(enc.b orelse 0, enc.w orelse 0, enc.l orelse 0);
                     const map = comptime build: {
-                        var map = [1]?Size{null} ** (highest_encoding + 1);
+                        var map = [1]?Size{null} ** (this.biggestEncoding() orelse 0 + 1);
                         for (std.meta.fieldNames(@TypeOf(enc))) |field| {
                             if (@FieldType(enc, field) == ?comptime_int) {
                                 map[@field(enc, field) orelse continue] = @field(Size, field);
@@ -318,23 +448,26 @@ const Size = enum {
                         }
                         break :build map;
                     };
-                    break :blk map[
-                        extract(std.meta.Int(
-                            .unsigned,
-                            std.math.ceilPowerOfTwo(comptime_int, highest_encoding),
-                        ), opcode, enc.at)
-                    ];
+                    break :blk map[extract(this.Type(), opcode, enc.at)];
                 },
             };
         }
 
         /// Encodes a size and returns the set bits
-        fn encode(comptime this: @This(), size: Size) u16 {
+        fn encode(comptime this: @This(), size: Size) this.Type() {
             return switch (this) {
-                .fixed => 0,
+                .fixed => {},
                 .dyn => |enc| switch (size) {
                     inline else => |s| @field(enc, @tagName(s)) orelse 0 << enc.at,
                 },
+            };
+        }
+
+        /// Gets the biggest encoding value
+        fn biggestEncoding(comptime this: @This()) ?comptime_int {
+            return switch (this) {
+                .fixed => null,
+                .dyn => |enc| @max(enc.b orelse 0, enc.w orelse 0, enc.l orelse 0),
             };
         }
     };
@@ -363,7 +496,21 @@ const Opcode = struct {
     }
 
     fn match(this: @This(), opcode: u16) bool {
-        return opcode ^ this.set & ~this.any;
+        return opcode ^ this.set & ~this.any == 0;
+    }
+
+    /// Overwrite some bits at a specific position
+    fn overwrite(this: @This(), at: u4, with: anytype) @This() {
+        const bits = switch (@TypeOf(with)) {
+            comptime_int => @as(std.math.IntFittingRange(0, with), with),
+            u0 => return this,
+            else => with,
+        };
+        const mask: u16 = ((1 << @bitSizeOf(@TypeOf(bits))) - 1) << at;
+        return .{
+            .set = this.set & ~mask | @as(u16, bits) << at,
+            .any = this.any & ~mask,
+        };
     }
 };
 
@@ -409,21 +556,19 @@ fn DataTarget(n: u4) type {
     return struct {
         n: u3,
 
-        fn init(_: *Exec, comptime _: ?Size, opcode: u16) @This() {
+        fn Data(comptime size: Size) type {
+            return size.Int(.unsigned);
+        }
+
+        fn init(_: *Exec, comptime _: Size, opcode: u16) @This() {
             return .{ .n = extract(u3, opcode, n) };
         }
 
-        fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) size.Int(.unsigned) {
+        fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
             return @truncate(exec.cpu.d[this.n]);
         }
 
-        fn store(
-            this: @This(),
-            exec: *Exec,
-            comptime size: ?Size,
-            _: u16,
-            data: size.Int(.unsigned),
-        ) void {
+        fn store(this: @This(), exec: *Exec, comptime size: Size, _: u16, data: Data(size)) void {
             exec.cpu.d[this.n] = overwrite(exec.cpu.d[this.n], data);
         }
 
@@ -432,7 +577,7 @@ fn DataTarget(n: u4) type {
                 reader: *std.io.Reader,
                 opcode: u16,
 
-                fn format(this: @This(), writer: *std.io.Writer) !void {
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     try writer.print("d{}", .{extract(u3, this.opcode, n)});
                 }
             };
@@ -445,21 +590,19 @@ fn AddrTarget(n: u4) type {
     return struct {
         n: u3,
 
+        fn Data(comptime size: Size) type {
+            return size.Int(.unsigned);
+        }
+
         fn init(_: *Exec, comptime _: Size, opcode: u16) @This() {
             return .{ .n = extract(u3, opcode, n) };
         }
 
-        fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) size.Int(.unsigned) {
+        fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
             return @truncate(exec.cpu.a[this.n]);
         }
 
-        fn store(
-            this: @This(),
-            exec: *Exec,
-            comptime size: Size,
-            _: u16,
-            data: size.Int(.unsigned),
-        ) void {
+        fn store(this: @This(), exec: *Exec, comptime size: Size, _: u16, data: Data(size)) void {
             exec.cpu.a[this.n] = extend(u32, data);
         }
 
@@ -468,7 +611,7 @@ fn AddrTarget(n: u4) type {
                 reader: *std.io.Reader,
                 opcode: u16,
 
-                fn format(this: @This(), writer: *std.io.Writer) !void {
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     try writer.print("a{}", .{extract(u3, this.opcode, n)});
                 }
             };
@@ -502,19 +645,23 @@ fn EaTarget(m: u4, n: u4) type {
         mode: Mode,
         addr: u32,
 
+        fn Data(comptime size: Size) type {
+            return size.Int(.unsigned);
+        }
+
         fn init(exec: *Exec, comptime size: Size, opcode: u16) @This() {
             const reg = extract(u3, opcode, n);
             const mode = Mode.decode(extract(u3, opcode, m), reg);
             const addr = switch (mode) {
                 .data_reg, .addr_reg => reg,
-                .iregdirect => exec.cpu.a[reg],
+                .indirect => exec.cpu.a[reg],
                 .post_inc => post_inc: {
                     const addr = exec.cpu.a[reg];
-                    exec.cpu.a[reg] += @sizeOf(size);
+                    exec.cpu.a[reg] += size.bitSize() / 8;
                     break :post_inc addr;
                 },
                 .pre_dec => pre_dec: {
-                    exec.cpu.a[reg] -= @sizeOf(size);
+                    exec.cpu.a[reg] -= size.bitSize() / 8;
                     exec.clk += 2;
                     break :pre_dec exec.cpu.a[reg];
                 },
@@ -529,7 +676,7 @@ fn EaTarget(m: u4, n: u4) type {
             return .{ .mode = mode, .addr = addr };
         }
 
-        fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) size.Int(.unsigned) {
+        fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
             return switch (this.mode) {
                 .data_reg => @truncate(exec.cpu.d[this.addr]),
                 .addr_reg => @truncate(exec.cpu.a[this.addr]),
@@ -538,13 +685,7 @@ fn EaTarget(m: u4, n: u4) type {
             };
         }
 
-        fn store(
-            this: @This(),
-            exec: *Exec,
-            comptime size: Size,
-            _: u16,
-            data: size.Int(.unsigned),
-        ) void {
+        fn store(this: @This(), exec: *Exec, comptime size: Size, _: u16, data: Data(size)) void {
             switch (this.mode) {
                 .data_reg => exec.cpu.d[this.addr] = overwrite(exec.cpu.d[this.addr], data),
                 .addr_reg => exec.cpu.a[this.addr] = overwrite(exec.cpu.a[this.addr], data),
@@ -558,26 +699,26 @@ fn EaTarget(m: u4, n: u4) type {
                 reader: *std.io.Reader,
                 opcode: u16,
 
-                fn fetch(this: @This(), comptime Data: type) Data {
-                    const Fetch = std.meta.int(.unsigned, @max(16, @bitSizeOf(Data)));
-                    const fetched = try this.reader.takeInt(Fetch, .big);
+                fn fetch(this: @This(), comptime Type: type) std.io.Writer.Error!Type {
+                    const Fetch = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Type)));
+                    const fetched = this.reader.takeInt(Fetch, .big) catch return error.WriteFailed;
                     return @bitCast(@as(
-                        std.meta.int(.unsigned, @bitSizeOf(Data)),
+                        std.meta.Int(.unsigned, @bitSizeOf(Type)),
                         @truncate(fetched),
                     ));
                 }
 
-                fn format(this: @This(), writer: *std.io.Writer) !void {
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     const reg = extract(u3, this.opcode, n);
                     switch (Mode.decode(extract(u3, this.opcode, m), reg)) {
                         .data_reg => try writer.print("d{}", .{reg}),
                         .addr_reg => try writer.print("a{}", .{reg}),
-                        .iregdirect => try writer.print("(a{})", .{reg}),
+                        .indirect => try writer.print("(a{})", .{reg}),
                         .post_inc => try writer.print("(a{})+", .{reg}),
                         .pre_dec => try writer.print("-(a{})", .{reg}),
-                        .addr_disp => try writer.print("({}, a{})", .{ this.fetch(i16), reg }),
+                        .addr_disp => try writer.print("({}, a{})", .{ try this.fetch(i16), reg }),
                         .addr_idx, .pc_idx => |mode| {
-                            const idx = this.fetch(Index);
+                            const idx = try this.fetch(Index);
                             try writer.print("({}, ", .{idx.disp});
                             switch (mode) {
                                 .addr_idx => try writer.print("a{}", .{reg}),
@@ -585,20 +726,20 @@ fn EaTarget(m: u4, n: u4) type {
                                 else => unreachable,
                             }
                             try writer.print(", {c}{}.{c})", .{ switch (idx.m) {
-                                0 => 'd',
-                                1 => 'a',
+                                0 => @as(u8, 'd'),
+                                1 => @as(u8, 'a'),
                             }, idx.n, switch (idx.size) {
-                                0 => 'w',
-                                1 => 'l',
+                                0 => @as(u8, 'w'),
+                                1 => @as(u8, 'l'),
                             } });
                         },
-                        .abs_word => try writer.print("{x:0>4}.w", .{this.fetch(u16)}),
-                        .abs_long => try writer.print("{x:0>8}.l", .{this.fetch(u32)}),
-                        .pc_disp => try writer.print("({}, pc)", .{this.fetch(i16)}),
+                        .abs_word => try writer.print("{x:0>4}.w", .{try this.fetch(u16)}),
+                        .abs_long => try writer.print("{x:0>8}.l", .{try this.fetch(u32)}),
+                        .pc_disp => try writer.print("({}, pc)", .{try this.fetch(i16)}),
                         .immediate => switch (size) {
-                            .b => try writer.print("#{x:0>2}", .{this.fetch(u8)}),
-                            .w => try writer.print("#{x:0>4}", .{this.fetch(u16)}),
-                            .l => try writer.print("#{x:0>8}", .{this.fetch(u32)}),
+                            .b => try writer.print("#{x:0>2}", .{try this.fetch(u8)}),
+                            .w => try writer.print("#{x:0>4}", .{try this.fetch(u16)}),
+                            .l => try writer.print("#{x:0>8}", .{try this.fetch(u32)}),
                         },
                     }
                 }
@@ -627,7 +768,7 @@ const Add = struct {
             .z = .set,
             .v = .set,
             .c = .set,
-        }).apply(&exec.cpu.status, .{
+        }).apply(&exec.cpu.sr, .{
             .n = negative(sum),
             .z = sum == 0,
             .v = overflow,
@@ -678,13 +819,7 @@ fn sparselut(
     comptime Index: type,
     comptime context: anytype,
     comptime getter: fn (@TypeOf(context), Index) ?comptime_int,
-) fn (Index) ret_type: {
-    var max = 0;
-    for (0..1 << @bitSizeOf(Index)) |i| {
-        max = @max(max, getter(context, i));
-    }
-    break :ret_type ?std.math.IntFittingRange(0, max);
-} {
+) fn (Index) SparseLut(Index, context, getter) {
     const level_size = 4;
     const index_size = @bitSizeOf(Index);
     const Node = struct {
@@ -698,15 +833,20 @@ fn sparselut(
             const prefix_len = if (@TypeOf(prefix) == void) 0 else @bitSizeOf(@TypeOf(prefix));
             if (prefix_len >= index_size) {
                 const entry = getter(context, @bitCast(prefix));
-                null_entry.* = @max(null_entry.*, entry orelse return entry + 1);
+                null_entry.* = @max(null_entry.*, (entry orelse return entry) + 1);
                 return entry;
             } else {
                 var node = @This(){};
                 for (&node.entries, 0..1 << level_size) |*entry, i| {
-                    entry.* = visit(nodes, @as(
-                        std.meta.Int(.unsigned, prefix_len + 4),
+                    var next_prefix = @as(
+                        std.meta.Int(.unsigned, prefix_len + level_size),
                         if (prefix_len == 0) 0 else prefix,
-                    ) << 4 + i);
+                    );
+                    if (prefix_len > 0) {
+                        next_prefix <<= level_size;
+                    }
+                    next_prefix += @as(std.meta.Int(.unsigned, level_size), @intCast(i));
+                    entry.* = visit(nodes, null_entry, next_prefix);
                 }
                 return node.add(nodes);
             }
@@ -714,7 +854,7 @@ fn sparselut(
 
         fn add(comptime this: @This(), comptime nodes: *std.ArrayList(@This())) usize {
             return for (nodes.items, 0..) |node, idx| {
-                if (std.mem.eql(usize, this.entries, node.entries)) {
+                if (std.mem.eql(?comptime_int, &this.entries, &node.entries)) {
                     break idx;
                 }
             } else add: {
@@ -724,7 +864,7 @@ fn sparselut(
         }
     };
 
-    var node_buffer: [index_size / level_size]Node = undefined;
+    var node_buffer: [1 << index_size / level_size]Node = undefined;
     var nodes = std.ArrayList(Node).initBuffer(&node_buffer);
     var null_entry = 0;
 
@@ -733,12 +873,7 @@ fn sparselut(
 
     var compressed: [nodes.items.len << level_size]Entry = undefined;
     for (&compressed, 0..) |*entry, i| {
-        entry.* = nodes.items[i >> level_size].entries[
-            i & ~@as(
-                usize,
-                1 << level_size,
-            )
-        ] orelse null_entry;
+        entry.* = nodes.items[i >> level_size].entries[i % (1 << level_size)] orelse null_entry;
     }
     const final = compressed;
     const RetType = ?std.math.IntFittingRange(0, null_entry - 1);
@@ -747,7 +882,7 @@ fn sparselut(
     return struct {
         pub fn lut(index: Index) RetType {
             const first_level = index_size - level_size;
-            var entry = final[(top_level << level_size) + (index >> first_level)];
+            var entry: usize = final[(top_level << level_size) + (index >> first_level)];
             inline for (1..index_size / level_size) |level| {
                 const nibble: u4 = @truncate(index >> first_level - level * level_size);
                 entry = final[(entry << level_size) + nibble];
@@ -755,6 +890,19 @@ fn sparselut(
             return if (entry == null_return) null else @intCast(entry);
         }
     }.lut;
+}
+
+fn SparseLut(
+    comptime Index: type,
+    comptime context: anytype,
+    comptime getter: fn (@TypeOf(context), Index) ?comptime_int,
+) type {
+    @setEvalBranchQuota((1 << @bitSizeOf(Index)) * 1000);
+    var max = 0;
+    for (0..1 << @bitSizeOf(Index)) |i| {
+        max = @max(max, getter(context, i) orelse 0);
+    }
+    return ?std.math.IntFittingRange(0, max);
 }
 
 /// Instruction set architecture faciltates runtime running of instructions and disassembling
@@ -772,7 +920,9 @@ fn Isa(comptime instrs: []const Instr) type {
         }
 
         /// Gets the disassembler for the opcode
-        pub fn disasm(opcode: u16) ?*const fn (*std.io.Writer, *std.io.Reader) anyerror!void {
+        pub fn disasm(
+            opcode: u16,
+        ) ?*const fn (*std.io.Writer, *std.io.Reader) std.io.Writer.Error!void {
             return matcher.perms[lut(opcode) orelse return null].disasm;
         }
     };
@@ -783,7 +933,7 @@ fn fetch(this: *Exec, comptime Data: type) Data {
     const fetch_width = @max(16, @bitSizeOf(Data));
     const data = this.read(std.meta.Int(.unsigned, fetch_width), this.cpu.pc);
     this.cpu.pc += fetch_width / 8;
-    return @bitCast(@as(this.meta.Int(.unsigned, @bitSizeOf(Data)), @truncate(data)));
+    return @bitCast(@as(std.meta.Int(.unsigned, @bitSizeOf(Data)), @truncate(data)));
 }
 
 /// Read data type X from the bus
@@ -791,15 +941,15 @@ fn read(this: *Exec, comptime Data: type, addr: u32) Data {
     switch (@bitSizeOf(Data)) {
         8 => {
             this.clk += 4;
-            return @bitCast(this.bus.vtable.rdb(this.bus.ptr, addr, addr));
+            return @bitCast(this.bus.rdb(this.bus, addr));
         },
         16 => {
             this.clk += 4;
-            return @bitCast(this.bus.vtable.rdw(this.bus.ptr, addr, addr));
+            return @bitCast(this.bus.rdw(this.bus, addr));
         },
         32 => {
             this.clk += 8;
-            return @bitCast(this.bus.vtable.rdl(this.bus.ptr, addr, addr));
+            return @bitCast(this.bus.rdl(this.bus, addr));
         },
         else => @compileError(std.fmt.comptimePrint(
             "Tried to read data of width {}!",
@@ -813,15 +963,15 @@ fn write(this: *Exec, comptime Data: type, addr: u32, data: Data) void {
     switch (@bitSizeOf(Data)) {
         8 => {
             this.clk += 4;
-            this.bus.vtable.wrb(this.bus.ptr, addr, @bitCast(data));
+            this.bus.wrb(this.bus, addr, @bitCast(data));
         },
         16 => {
             this.clk += 4;
-            this.bus.vtable.wrw(this.bus.ptr, addr, @bitCast(data));
+            this.bus.wrw(this.bus, addr, @bitCast(data));
         },
         32 => {
             this.clk += 8;
-            this.bus.vtable.wrl(this.bus.ptr, addr, @bitCast(data));
+            this.bus.wrl(this.bus, addr, @bitCast(data));
         },
         else => @compileError(std.fmt.comptimePrint(
             "Tried to write data of width {}!",
@@ -846,12 +996,90 @@ fn extend(comptime To: type, from: anytype) To {
 
 /// Overwrite the lower N bits with another integer
 fn overwrite(int: anytype, with: anytype) @TypeOf(int) {
-    const Int = std.meta.int(.unsigned, @bitSizeOf(@TypeOf(int)));
-    const mask: @TypeOf(Int) = (1 << @bitSizeOf(@TypeOf(with))) - 1;
+    const Int = std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(int)));
+    const mask: Int = (1 << @bitSizeOf(@TypeOf(with))) - 1;
     return int & ~mask | with;
 }
 
 /// Returns true if the int has the highest bit set
 fn negative(int: anytype) bool {
     return @as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(int))), @bitCast(int)) < 0;
+}
+
+/// A simple test runner for instructions
+const Test = struct {
+    cpu: Cpu = .{},
+    mem: [1024]u8 = [1]u8{0} ** 1024,
+    interface: Bus = .{
+        .rdb = struct {
+            fn rdb(bus: *Bus, addr: u32) u8 {
+                return rd(bus, addr, u8);
+            }
+        }.rdb,
+        .rdw = struct {
+            fn rdw(bus: *Bus, addr: u32) u16 {
+                return rd(bus, addr, u16);
+            }
+        }.rdw,
+        .rdl = struct {
+            fn rdl(bus: *Bus, addr: u32) u32 {
+                return rd(bus, addr, u32);
+            }
+        }.rdl,
+        .wrb = struct {
+            fn wrb(bus: *Bus, addr: u32, data: u8) void {
+                return wr(bus, addr, u8, data);
+            }
+        }.wrb,
+        .wrw = struct {
+            fn wrw(bus: *Bus, addr: u32, data: u16) void {
+                return wr(bus, addr, u16, data);
+            }
+        }.wrw,
+        .wrl = struct {
+            fn wrl(bus: *Bus, addr: u32, data: u32) void {
+                return wr(bus, addr, u32, data);
+            }
+        }.wrl,
+    },
+
+    /// Initialize with some opcodes and default cpu state
+    fn init(opcodes: []const u16) @This() {
+        var this = @This(){};
+        for (0..opcodes.len) |i| {
+            std.mem.writeInt(u16, this.mem[i * 2 ..][0..2], opcodes[i], .big);
+        }
+        return this;
+    }
+
+    /// Run one instruction
+    fn run(this: *@This(), disasm: []const u8) !usize {
+        var reader_buffer = [1]u8{0} ** 8;
+        var reader = this.interface.reader(0, &reader_buffer);
+        var writer_buffer = std.ArrayList(u8){};
+        var writer = writer_buffer.writer(std.testing.allocator);
+        defer writer_buffer.deinit(std.testing.allocator);
+        try writer.print("{f}", .{
+            Disasm{ .reader = &reader.interface },
+        });
+        try std.testing.expectEqualSlices(u8, disasm, writer_buffer.items);
+        return step(&this.cpu, &this.interface);
+    }
+
+    /// Reading/writing instructions
+    fn rd(bus: *Bus, addr: u32, comptime Data: type) Data {
+        const this: *Test = @fieldParentPtr("interface", bus);
+        return std.mem.readInt(Data, this.mem[addr..][0..@sizeOf(Data)], .big);
+    }
+    fn wr(bus: *Bus, addr: u32, comptime Data: type, data: Data) void {
+        const this: *Test = @fieldParentPtr("interface", bus);
+        std.mem.writeInt(Data, this.mem[addr..][0..@sizeOf(Data)], data, .big);
+    }
+};
+
+test "add" {
+    var runner = Test.init(&.{0xD000});
+    runner.cpu.d[0] = 10;
+    try std.testing.expectEqual(4, try runner.run("add.b d0,d0"));
+    try std.testing.expectEqual(20, runner.cpu.d[0]);
 }
