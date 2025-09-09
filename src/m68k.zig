@@ -326,7 +326,7 @@ fn Flags(comptime flags: struct {
 }) type {
     const FlagName = enum { c, v, z, n, x };
     return struct {
-        pub fn apply(status: *Cpu.Status, updates: anytype) void {
+        pub inline fn apply(status: *Cpu.Status, updates: anytype) void {
             var set = @as(u5, @intFromBool(flags.c.mask(.set))) << 0 |
                 @as(u5, @intFromBool(flags.v.mask(.set))) << 1 |
                 @as(u5, @intFromBool(flags.z.mask(.set))) << 2 |
@@ -514,43 +514,6 @@ const Opcode = struct {
     }
 };
 
-/// Address modes
-const Mode = enum {
-    data_reg,
-    addr_reg,
-    indirect,
-    post_inc,
-    pre_dec,
-    addr_disp,
-    addr_idx,
-    abs_word,
-    abs_long,
-    pc_disp,
-    pc_idx,
-    immediate,
-
-    /// Get from 'm' and 'n' bits
-    fn decode(m: u3, n: u3) @This() {
-        return switch (m) {
-            0b000 => .data_reg,
-            0b001 => .addr_reg,
-            0b010 => .indirect,
-            0b011 => .post_inc,
-            0b100 => .pre_dec,
-            0b101 => .addr_disp,
-            0b110 => .addr_idx,
-            0b111 => switch (n) {
-                0b000 => .abs_word,
-                0b001 => .abs_long,
-                0b010 => .pc_disp,
-                0b011 => .pc_idx,
-                0b100 => .immediate,
-                else => @panic("Bad address mode encoding"),
-            },
-        };
-    }
-};
-
 /// Data register source or destination target
 fn DataTarget(n: u4) type {
     return struct {
@@ -619,8 +582,68 @@ fn AddrTarget(n: u4) type {
     };
 }
 
-/// Effective address source or destination target
-fn EaTarget(m: u4, n: u4) type {
+/// Address modes
+const Mode = enum {
+    data_reg,
+    addr_reg,
+    indirect,
+    post_inc,
+    pre_dec,
+    addr_disp,
+    addr_idx,
+    abs_word,
+    abs_long,
+    pc_disp,
+    pc_idx,
+    immediate,
+
+    /// Get from 'm' and 'n' bits
+    fn decode(m: u3, n: u3) @This() {
+        return switch (m) {
+            0b000 => .data_reg,
+            0b001 => .addr_reg,
+            0b010 => .indirect,
+            0b011 => .post_inc,
+            0b100 => .pre_dec,
+            0b101 => .addr_disp,
+            0b110 => .addr_idx,
+            0b111 => switch (n) {
+                0b000 => .abs_word,
+                0b001 => .abs_long,
+                0b010 => .pc_disp,
+                0b011 => .pc_idx,
+                0b100 => .immediate,
+                else => @panic("Bad address mode encoding"),
+            },
+        };
+    }
+
+    /// Calculate an address, reg can be left as undefined if its a mode that doesn't require it
+    fn calc(this: @This(), exec: *Exec, comptime size: Size, reg: u3) u32 {
+        return switch (this) {
+            .data_reg, .addr_reg => reg,
+            .indirect => exec.cpu.a[reg],
+            .post_inc => post_inc: {
+                const addr = exec.cpu.a[reg];
+                exec.cpu.a[reg] += size.bitSize() / 8;
+                break :post_inc addr;
+            },
+            .pre_dec => pre_dec: {
+                exec.cpu.a[reg] -= size.bitSize() / 8;
+                exec.clk += 2;
+                break :pre_dec exec.cpu.a[reg];
+            },
+            .addr_disp => exec.cpu.a[reg] +% extend(u32, exec.fetch(u16)),
+            .addr_idx => exec.cpu.a[reg] +% exec.fetch(Index).getDisp(exec),
+            .abs_word => extend(u32, exec.fetch(u16)),
+            .abs_long => exec.fetch(u32),
+            .pc_disp => exec.cpu.pc +% extend(u32, exec.fetch(u16)),
+            .pc_idx => exec.cpu.pc +% exec.fetch(Index).getDisp(exec),
+            .immediate => 0,
+        };
+    }
+
+    /// Index extension word used in address calculation
     const Index = packed struct {
         disp: i8,
         _pad0: u3,
@@ -628,6 +651,7 @@ fn EaTarget(m: u4, n: u4) type {
         n: u3,
         m: u1,
 
+        /// Gets the total displacement of the index word (casted to unsigned int)
         fn getDisp(this: @This(), exec: *Exec) u32 {
             exec.clk += 2;
             const reg = switch (this.m) {
@@ -641,6 +665,62 @@ fn EaTarget(m: u4, n: u4) type {
         }
     };
 
+    /// Disassemble an addressing mode
+    fn Disasm(comptime size: Size) type {
+        return struct {
+            reader: *std.io.Reader,
+            mode: Mode,
+            reg: u3,
+
+            fn fetch(this: @This(), comptime Type: type) std.io.Writer.Error!Type {
+                const Fetch = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Type)));
+                const fetched = this.reader.takeInt(Fetch, .big) catch return error.WriteFailed;
+                return @bitCast(@as(
+                    std.meta.Int(.unsigned, @bitSizeOf(Type)),
+                    @truncate(fetched),
+                ));
+            }
+
+            pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                switch (this.mode) {
+                    .data_reg => try writer.print("d{}", .{this.reg}),
+                    .addr_reg => try writer.print("a{}", .{this.reg}),
+                    .indirect => try writer.print("(a{})", .{this.reg}),
+                    .post_inc => try writer.print("(a{})+", .{this.reg}),
+                    .pre_dec => try writer.print("-(a{})", .{this.reg}),
+                    .addr_disp => try writer.print("({}, a{})", .{ try this.fetch(i16), this.reg }),
+                    .addr_idx, .pc_idx => |mode| {
+                        const idx = try this.fetch(Index);
+                        try writer.print("({}, ", .{idx.disp});
+                        switch (mode) {
+                            .addr_idx => try writer.print("a{}", .{this.reg}),
+                            .pc_idx => try writer.print("pc", .{}),
+                            else => unreachable,
+                        }
+                        try writer.print(", {c}{}.{c})", .{ switch (idx.m) {
+                            0 => @as(u8, 'd'),
+                            1 => @as(u8, 'a'),
+                        }, idx.n, switch (idx.size) {
+                            0 => @as(u8, 'w'),
+                            1 => @as(u8, 'l'),
+                        } });
+                    },
+                    .abs_word => try writer.print("{x:0>4}.w", .{try this.fetch(u16)}),
+                    .abs_long => try writer.print("{x:0>8}.l", .{try this.fetch(u32)}),
+                    .pc_disp => try writer.print("({}, pc)", .{try this.fetch(i16)}),
+                    .immediate => switch (size) {
+                        .b => try writer.print("#{x:0>2}", .{try this.fetch(u8)}),
+                        .w => try writer.print("#{x:0>4}", .{try this.fetch(u16)}),
+                        .l => try writer.print("#{x:0>8}", .{try this.fetch(u32)}),
+                    },
+                }
+            }
+        };
+    }
+};
+
+/// Effective address source or destination target
+fn EaTarget(m: u4, n: u4) type {
     return struct {
         mode: Mode,
         addr: u32,
@@ -652,28 +732,7 @@ fn EaTarget(m: u4, n: u4) type {
         fn init(exec: *Exec, comptime size: Size, opcode: u16) @This() {
             const reg = extract(u3, opcode, n);
             const mode = Mode.decode(extract(u3, opcode, m), reg);
-            const addr = switch (mode) {
-                .data_reg, .addr_reg => reg,
-                .indirect => exec.cpu.a[reg],
-                .post_inc => post_inc: {
-                    const addr = exec.cpu.a[reg];
-                    exec.cpu.a[reg] += size.bitSize() / 8;
-                    break :post_inc addr;
-                },
-                .pre_dec => pre_dec: {
-                    exec.cpu.a[reg] -= size.bitSize() / 8;
-                    exec.clk += 2;
-                    break :pre_dec exec.cpu.a[reg];
-                },
-                .addr_disp => exec.cpu.a[reg] +% extend(u32, exec.fetch(u16)),
-                .addr_idx => exec.cpu.a[reg] +% exec.fetch(Index).getDisp(exec),
-                .abs_word => extend(u32, exec.fetch(u16)),
-                .abs_long => exec.fetch(u32),
-                .pc_disp => exec.cpu.pc +% extend(u32, exec.fetch(u16)),
-                .pc_idx => exec.cpu.pc +% exec.fetch(Index).getDisp(exec),
-                .immediate => 0,
-            };
-            return .{ .mode = mode, .addr = addr };
+            return .{ .mode = mode, .addr = mode.calc(exec, size, reg) };
         }
 
         fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
@@ -710,38 +769,11 @@ fn EaTarget(m: u4, n: u4) type {
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     const reg = extract(u3, this.opcode, n);
-                    switch (Mode.decode(extract(u3, this.opcode, m), reg)) {
-                        .data_reg => try writer.print("d{}", .{reg}),
-                        .addr_reg => try writer.print("a{}", .{reg}),
-                        .indirect => try writer.print("(a{})", .{reg}),
-                        .post_inc => try writer.print("(a{})+", .{reg}),
-                        .pre_dec => try writer.print("-(a{})", .{reg}),
-                        .addr_disp => try writer.print("({}, a{})", .{ try this.fetch(i16), reg }),
-                        .addr_idx, .pc_idx => |mode| {
-                            const idx = try this.fetch(Index);
-                            try writer.print("({}, ", .{idx.disp});
-                            switch (mode) {
-                                .addr_idx => try writer.print("a{}", .{reg}),
-                                .pc_idx => try writer.print("pc", .{}),
-                                else => unreachable,
-                            }
-                            try writer.print(", {c}{}.{c})", .{ switch (idx.m) {
-                                0 => @as(u8, 'd'),
-                                1 => @as(u8, 'a'),
-                            }, idx.n, switch (idx.size) {
-                                0 => @as(u8, 'w'),
-                                1 => @as(u8, 'l'),
-                            } });
-                        },
-                        .abs_word => try writer.print("{x:0>4}.w", .{try this.fetch(u16)}),
-                        .abs_long => try writer.print("{x:0>8}.l", .{try this.fetch(u32)}),
-                        .pc_disp => try writer.print("({}, pc)", .{try this.fetch(i16)}),
-                        .immediate => switch (size) {
-                            .b => try writer.print("#{x:0>2}", .{try this.fetch(u8)}),
-                            .w => try writer.print("#{x:0>4}", .{try this.fetch(u16)}),
-                            .l => try writer.print("#{x:0>8}", .{try this.fetch(u32)}),
-                        },
-                    }
+                    try writer.print("{f}", .{Mode.Disasm(size){
+                        .reader = this.reader,
+                        .mode = Mode.decode(extract(u3, this.opcode, m), reg),
+                        .reg = reg,
+                    }});
                 }
             };
         }
