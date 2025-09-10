@@ -1109,7 +1109,7 @@ const Test = struct {
     }
 };
 
-test "add" {
+test "add ea,dn; add dn,ea" {
     var runner: Test = undefined;
 
     // 1) Test that the <instruction> is encoded correctly
@@ -1125,4 +1125,28 @@ test "add" {
     runner.cpu.d[0] = 10;
     try std.testing.expectEqual(24, try runner.run("add.l d0,($0080).w"));
     try std.testing.expectEqual(350010, Test.rd(&runner.interface, 0x80, u32));
+    
+    // 3) Test that the <instruction> produces correct flag side-effects
+    runner = Test.init(&.{ 0xD001 });
+    runner.cpu.d[0] = 0x70;
+    runner.cpu.d[1] = 0x40;
+    try std.testing.expectEqual(4, try runner.run("add.b d1,d0"));
+    try std.testing.expectEqual(0xB0, runner.cpu.d[0]);
+    try std.testing.expectEqual(false, runner.cpu.sr.c);
+    try std.testing.expectEqual(true, runner.cpu.sr.v);
+    try std.testing.expectEqual(false, runner.cpu.sr.z);
+    try std.testing.expectEqual(true, runner.cpu.sr.n);
+    try std.testing.expectEqual(false, runner.cpu.sr.x);
+    
+    // 4) Test that the <instruction> produces correct flag side-effects
+    runner = Test.init(&.{ 0xD001 });
+    runner.cpu.d[0] = 0x10;
+    runner.cpu.d[1] = 0xF0;
+    try std.testing.expectEqual(4, try runner.run("add.b d1,d0"));
+    try std.testing.expectEqual(0x00, runner.cpu.d[0]);
+    try std.testing.expectEqual(true, runner.cpu.sr.c);
+    try std.testing.expectEqual(false, runner.cpu.sr.v);
+    try std.testing.expectEqual(true, runner.cpu.sr.z);
+    try std.testing.expectEqual(false, runner.cpu.sr.n);
+    try std.testing.expectEqual(true, runner.cpu.sr.x);
 }
