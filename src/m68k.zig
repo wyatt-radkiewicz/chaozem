@@ -124,7 +124,11 @@ const isa = Isa(&.{
     Instr{
         .name = "add",
         .enc = .init("1101xxx0xxxxxxxx"),
-        .src = EaTarget(3, 0),
+        .src = EaTarget(3, 0, .{ .l = .initDefault(2, .{
+            .data_reg = 4,
+            .addr_reg = 4,
+            .immediate = 4,
+        }) }),
         .dst = DataTarget(9),
         .op = Add,
         .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
@@ -133,9 +137,29 @@ const isa = Isa(&.{
         .name = "add",
         .enc = .init("1101xxx1xxxxxxxx"),
         .src = DataTarget(9),
-        .dst = EaTarget(3, 0),
+        .dst = EaTarget(3, 0, .{}),
         .op = Add,
         .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "ori",
+        .enc = .init("00000000xx111100"),
+        .src = ImmTarget,
+        .dst = SrTarget(12),
+        .op = Or,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
+    },
+    Instr{
+        .name = "ori",
+        .enc = .init("00000000xxxxxxxx"),
+        .src = ImmTarget,
+        .dst = EaTarget(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
+        .op = Or,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "nop",
+        .enc = .init("0100111001110001"),
     },
 });
 
@@ -312,7 +336,9 @@ const Instr = struct {
             switch (enc) {
                 .fixed => |size| perms.appendAssumeCapacity(.init(this, size)),
                 .dyn => |x| for (std.meta.fieldNames(@TypeOf(x))) |field| {
-                    if (@FieldType(@TypeOf(x), field) == ?comptime_int) {
+                    if (@FieldType(@TypeOf(x), field) == ?comptime_int and
+                        @field(x, field) != null)
+                    {
                         perms.appendAssumeCapacity(.init(this, @field(Size, field)));
                     }
                 },
@@ -336,22 +362,22 @@ fn Flags(comptime flags: struct {
     const FlagName = enum { c, v, z, n, x };
     return struct {
         pub inline fn apply(status: *Cpu.Status, updates: anytype) void {
-            var set = @as(u5, @intFromBool(flags.c.mask(.set))) << 0 |
+            var set = comptime @as(u5, @intFromBool(flags.c.mask(.set))) << 0 |
                 @as(u5, @intFromBool(flags.v.mask(.set))) << 1 |
                 @as(u5, @intFromBool(flags.z.mask(.set))) << 2 |
                 @as(u5, @intFromBool(flags.n.mask(.set))) << 3 |
                 @as(u5, @intFromBool(flags.x.mask(.set))) << 4;
-            var mask = @as(u5, @intFromBool(flags.c.mask(.overwrite))) << 0 |
+            var mask = comptime @as(u5, @intFromBool(flags.c.mask(.overwrite))) << 0 |
                 @as(u5, @intFromBool(flags.v.mask(.overwrite))) << 1 |
                 @as(u5, @intFromBool(flags.z.mask(.overwrite))) << 2 |
                 @as(u5, @intFromBool(flags.n.mask(.overwrite))) << 3 |
                 @as(u5, @intFromBool(flags.x.mask(.overwrite))) << 4;
             inline for (comptime std.meta.fieldNames(@TypeOf(updates))) |flag| {
+                const pos = @intFromEnum(@field(FlagName, flag));
+                const bit = @intFromBool(@field(updates, flag));
                 switch (@field(flags, flag)) {
-                    .set => set |= @as(u5, @intFromBool(@field(updates, flag))) <<
-                        @intFromEnum(@field(FlagName, flag)),
-                    .clr => mask |= @as(u5, @intFromBool(!@field(updates, flag))) <<
-                        @intFromEnum(@field(FlagName, flag)),
+                    .set => set |= @as(u5, bit) << pos,
+                    .clr => mask |= @as(u5, ~bit) << pos,
                     else => @compileError("Unneeded flag given"),
                 }
             }
@@ -359,8 +385,8 @@ fn Flags(comptime flags: struct {
             status.* = @bitCast(@as(u16, @bitCast(status.*)) & ~@as(u16, mask) | set);
 
             inline for (comptime std.meta.fieldNames(@TypeOf(flags))) |flag| {
-                switch (@field(flags, flag)) {
-                    .c, .v, .z, .n, .x => |copy| {
+                switch (comptime @field(flags, flag)) {
+                    inline .c, .v, .z, .n, .x => |copy| {
                         const bits: u16 = @bitCast(status.*);
                         const src = @intFromEnum(@field(FlagName, @tagName(copy)));
                         const dst = @intFromEnum(@field(FlagName, flag));
@@ -591,6 +617,84 @@ fn AddrTarget(n: u4) type {
     };
 }
 
+/// Status register source or destination target
+fn SrTarget(comptime delay: usize) type {
+    return struct {
+        fn Data(comptime size: Size) type {
+            return switch (size) {
+                .l => @compileError("Status register is only 16 bits!"),
+                else => size.Int(.unsigned),
+            };
+        }
+
+        fn init(exec: *Exec, comptime _: Size, _: u16) @This() {
+            exec.clk += delay;
+            return .{};
+        }
+
+        fn load(_: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
+            const bits: u16 = @bitCast(exec.cpu.sr);
+            return @truncate(bits);
+        }
+
+        fn store(_: @This(), exec: *Exec, comptime size: Size, _: u16, data: Data(size)) void {
+            const bits: u16 = @bitCast(exec.cpu.sr);
+            exec.cpu.sr = @bitCast(overwrite(bits, data));
+        }
+
+        fn Disasm(comptime size: Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    try writer.print("{s}", .{switch (size) {
+                        .b => "ccr",
+                        .w => "sr",
+                        .l => @compileError("Expected byte or word with status register disasm!"),
+                    }});
+                }
+            };
+        }
+    };
+}
+
+/// Immediate source data target
+const ImmTarget = struct {
+    fn Data(comptime size: Size) type {
+        return size.Int(.unsigned);
+    }
+
+    fn init(_: *Exec, comptime _: Size, _: u16) @This() {
+        return .{};
+    }
+
+    fn load(_: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
+        return exec.fetch(Data(size));
+    }
+
+    fn store(_: @This(), _: *Exec, comptime size: Size, _: u16, _: Data(size)) void {}
+
+    fn Disasm(comptime size: Size) type {
+        return struct {
+            reader: *std.io.Reader,
+            opcode: u16,
+
+            pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                switch (size) {
+                    .b => try writer.print("#${x:0>2}", .{@as(u8, @truncate(
+                        this.reader.takeInt(u16, .big) catch return error.WriteFailed,
+                    ))}),
+                    .w => try writer.print("#${x:0>4}", .{this.reader.takeInt(u16, .big) catch
+                        return error.WriteFailed}),
+                    .l => try writer.print("#${x:0>8}", .{this.reader.takeInt(u32, .big) catch
+                        return error.WriteFailed}),
+                }
+            }
+        };
+    }
+};
+
 /// Address modes
 const Mode = enum {
     data_reg,
@@ -681,15 +785,6 @@ const Mode = enum {
             mode: Mode,
             reg: u3,
 
-            fn fetch(this: @This(), comptime Type: type) std.io.Writer.Error!Type {
-                const Fetch = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Type)));
-                const fetched = this.reader.takeInt(Fetch, .big) catch return error.WriteFailed;
-                return @bitCast(@as(
-                    std.meta.Int(.unsigned, @bitSizeOf(Type)),
-                    @truncate(fetched),
-                ));
-            }
-
             pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                 switch (this.mode) {
                     .data_reg => try writer.print("d{}", .{this.reg}),
@@ -697,9 +792,13 @@ const Mode = enum {
                     .indirect => try writer.print("(a{})", .{this.reg}),
                     .post_inc => try writer.print("(a{})+", .{this.reg}),
                     .pre_dec => try writer.print("-(a{})", .{this.reg}),
-                    .addr_disp => try writer.print("({}, a{})", .{ try this.fetch(i16), this.reg }),
+                    .addr_disp => try writer.print("({}, a{})", .{
+                        this.reader.takeInt(i16, .big) catch return error.WriteFailed,
+                        this.reg,
+                    }),
                     .addr_idx, .pc_idx => |mode| {
-                        const idx = try this.fetch(Index);
+                        const idx: Index = @bitCast(this.reader.takeInt(u16, .big) catch
+                            return error.WriteFailed);
                         try writer.print("({}, ", .{idx.disp});
                         switch (mode) {
                             .addr_idx => try writer.print("a{}", .{this.reg}),
@@ -714,13 +813,24 @@ const Mode = enum {
                             1 => @as(u8, 'l'),
                         } });
                     },
-                    .abs_word => try writer.print("(${x:0>4}).w", .{try this.fetch(u16)}),
-                    .abs_long => try writer.print("(${x:0>8}).l", .{try this.fetch(u32)}),
-                    .pc_disp => try writer.print("({}, pc)", .{try this.fetch(i16)}),
+                    .abs_word => try writer.print(
+                        "(${x:0>4}).w",
+                        .{this.reader.takeInt(u16, .big) catch return error.WriteFailed},
+                    ),
+                    .abs_long => try writer.print(
+                        "(${x:0>8}).l",
+                        .{this.reader.takeInt(u32, .big) catch return error.WriteFailed},
+                    ),
+                    .pc_disp => try writer.print("({}, pc)", .{this.reader.takeInt(i16, .big) catch
+                        return error.WriteFailed}),
                     .immediate => switch (size) {
-                        .b => try writer.print("#${x:0>2}", .{try this.fetch(u8)}),
-                        .w => try writer.print("#${x:0>4}", .{try this.fetch(u16)}),
-                        .l => try writer.print("#${x:0>8}", .{try this.fetch(u32)}),
+                        .b => try writer.print("#${x:0>2}", .{@as(u8, @truncate(
+                            this.reader.takeInt(u16, .big) catch return error.WriteFailed,
+                        ))}),
+                        .w => try writer.print("#${x:0>4}", .{this.reader.takeInt(u16, .big) catch
+                            return error.WriteFailed}),
+                        .l => try writer.print("#${x:0>8}", .{this.reader.takeInt(u32, .big) catch
+                            return error.WriteFailed}),
                     },
                 }
             }
@@ -728,8 +838,20 @@ const Mode = enum {
     }
 };
 
+/// Effective address clock delays
+const EaDelay = struct {
+    b: std.EnumArray(Mode, usize) = .initFill(0),
+    w: std.EnumArray(Mode, usize) = .initFill(0),
+    l: std.EnumArray(Mode, usize) = .initFill(0),
+
+    /// Gets the delay for the mode and size combination
+    fn delay(comptime this: @This(), comptime size: Size, mode: Mode) usize {
+        return @field(this, @tagName(size)).get(mode);
+    }
+};
+
 /// Effective address source or destination target
-fn EaTarget(m: u4, n: u4) type {
+fn EaTarget(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
     return struct {
         mode: Mode,
         addr: u32,
@@ -741,6 +863,7 @@ fn EaTarget(m: u4, n: u4) type {
         fn init(exec: *Exec, comptime size: Size, opcode: u16) @This() {
             const reg = extract(u3, opcode, n);
             const mode = Mode.decode(extract(u3, opcode, m), reg);
+            exec.clk += delay.delay(size, mode);
             return .{ .mode = mode, .addr = mode.calc(exec, size, reg) };
         }
 
@@ -807,6 +930,28 @@ const Add = struct {
             .c = carry,
         });
         return sum;
+    }
+};
+
+/// Normal or operation
+const Or = struct {
+    fn op(
+        exec: *Exec,
+        comptime size: Size,
+        src: size.Int(.unsigned),
+        dst: size.Int(.unsigned),
+    ) size.Int(.unsigned) {
+        const result = src | dst;
+        Flags(.{
+            .n = .set,
+            .z = .set,
+            .v = .zero,
+            .c = .zero,
+        }).apply(&exec.cpu.sr, .{
+            .n = negative(result),
+            .z = result == 0,
+        });
+        return result;
     }
 };
 
@@ -896,7 +1041,7 @@ fn sparselut(
         }
     };
 
-    var node_buffer: [1 << index_size / level_size]Node = undefined;
+    var node_buffer: [1 + (1 << level_size * (index_size / level_size - 1))]Node = undefined;
     var nodes = std.ArrayList(Node).initBuffer(&node_buffer);
     var null_entry = 0;
 
@@ -961,7 +1106,7 @@ fn Isa(comptime instrs: []const Instr) type {
 }
 
 /// Fetch a type from the program counter of the cpu
-fn fetch(this: *Exec, comptime Data: type) Data {
+inline fn fetch(this: *Exec, comptime Data: type) Data {
     const fetch_width = @max(16, @bitSizeOf(Data));
     const data = this.read(std.meta.Int(.unsigned, fetch_width), this.cpu.pc);
     this.cpu.pc += fetch_width / 8;
@@ -969,7 +1114,7 @@ fn fetch(this: *Exec, comptime Data: type) Data {
 }
 
 /// Read data type X from the bus
-fn read(this: *Exec, comptime Data: type, addr: u32) Data {
+inline fn read(this: *Exec, comptime Data: type, addr: u32) Data {
     switch (@bitSizeOf(Data)) {
         8 => {
             this.clk += 4;
@@ -991,7 +1136,7 @@ fn read(this: *Exec, comptime Data: type, addr: u32) Data {
 }
 
 /// Write data type X to the bus
-fn write(this: *Exec, comptime Data: type, addr: u32, data: Data) void {
+inline fn write(this: *Exec, comptime Data: type, addr: u32, data: Data) void {
     switch (@bitSizeOf(Data)) {
         8 => {
             this.clk += 4;
@@ -1013,28 +1158,28 @@ fn write(this: *Exec, comptime Data: type, addr: u32, data: Data) void {
 }
 
 /// Extract a type from an integer at a position
-fn extract(comptime Type: type, from: anytype, at: std.math.Log2Int(@TypeOf(from))) Type {
+inline fn extract(comptime Type: type, from: anytype, at: std.math.Log2Int(@TypeOf(from))) Type {
     const TypeInt = std.meta.Int(.unsigned, @bitSizeOf(Type));
     const FromInt = std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(from)));
     return @bitCast(@as(TypeInt, @truncate(@as(FromInt, @bitCast(from)) >> at)));
 }
 
 /// Sign extend a specified integer to the specified size
-fn extend(comptime To: type, from: anytype) To {
+inline fn extend(comptime To: type, from: anytype) To {
     const ToSigned = std.meta.Int(.signed, @bitSizeOf(To));
     const FromSigned = std.meta.Int(.signed, @bitSizeOf(@TypeOf(from)));
     return @bitCast(@as(ToSigned, @as(FromSigned, @bitCast(from))));
 }
 
 /// Overwrite the lower N bits with another integer
-fn overwrite(int: anytype, with: anytype) @TypeOf(int) {
+inline fn overwrite(int: anytype, with: anytype) @TypeOf(int) {
     const Int = std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(int)));
     const mask: Int = (1 << @bitSizeOf(@TypeOf(with))) - 1;
     return int & ~mask | with;
 }
 
 /// Returns true if the int has the highest bit set
-fn negative(int: anytype) bool {
+inline fn negative(int: anytype) bool {
     return @as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(int))), @bitCast(int)) < 0;
 }
 
@@ -1125,9 +1270,9 @@ test "add ea,dn; add dn,ea" {
     runner.cpu.d[0] = 10;
     try std.testing.expectEqual(24, try runner.run("add.l d0,($0080).w"));
     try std.testing.expectEqual(350010, Test.rd(&runner.interface, 0x80, u32));
-    
+
     // 3) Test that the <instruction> produces correct flag side-effects
-    runner = Test.init(&.{ 0xD001 });
+    runner = Test.init(&.{0xD001});
     runner.cpu.d[0] = 0x70;
     runner.cpu.d[1] = 0x40;
     try std.testing.expectEqual(4, try runner.run("add.b d1,d0"));
@@ -1137,9 +1282,9 @@ test "add ea,dn; add dn,ea" {
     try std.testing.expectEqual(false, runner.cpu.sr.z);
     try std.testing.expectEqual(true, runner.cpu.sr.n);
     try std.testing.expectEqual(false, runner.cpu.sr.x);
-    
+
     // 4) Test that the <instruction> produces correct flag side-effects
-    runner = Test.init(&.{ 0xD001 });
+    runner = Test.init(&.{0xD001});
     runner.cpu.d[0] = 0x10;
     runner.cpu.d[1] = 0xF0;
     try std.testing.expectEqual(4, try runner.run("add.b d1,d0"));
@@ -1149,4 +1294,42 @@ test "add ea,dn; add dn,ea" {
     try std.testing.expectEqual(true, runner.cpu.sr.z);
     try std.testing.expectEqual(false, runner.cpu.sr.n);
     try std.testing.expectEqual(true, runner.cpu.sr.x);
+}
+
+test "nop" {
+    var runner: Test = undefined;
+
+    // 1) Test that the <instruction> is encoded correctly
+    runner = Test.init(&.{0x4e71});
+    try std.testing.expectEqual(4, try runner.run("nop"));
+}
+
+test "ori #imm,ccr; ori #imm,sr; ori #imm,ea" {
+    var runner: Test = undefined;
+
+    // 1) Test that the <instruction> is encoded correctly, and has correct side effects
+    runner = Test.init(&.{ 0x003c, 0x007f });
+    try std.testing.expectEqual(20, try runner.run("ori.b #$7f,ccr"));
+    try std.testing.expectEqual(true, runner.cpu.sr.c);
+    try std.testing.expectEqual(true, runner.cpu.sr.v);
+    try std.testing.expectEqual(true, runner.cpu.sr.z);
+    try std.testing.expectEqual(true, runner.cpu.sr.n);
+    try std.testing.expectEqual(true, runner.cpu.sr.x);
+
+    // 2) Test that the <instruction> is encoded correctly, and has correct side effects
+    runner = Test.init(&.{ 0x007c, 0xff0f });
+    try std.testing.expectEqual(20, try runner.run("ori.w #$ff0f,sr"));
+    try std.testing.expectEqual(true, runner.cpu.sr.c);
+    try std.testing.expectEqual(true, runner.cpu.sr.v);
+    try std.testing.expectEqual(true, runner.cpu.sr.z);
+    try std.testing.expectEqual(true, runner.cpu.sr.n);
+    try std.testing.expectEqual(false, runner.cpu.sr.x);
+    try std.testing.expectEqual(7, runner.cpu.sr.ipl);
+
+    // 3) Test that the <instruction> is encoded correctly, and has correct side effects
+    runner = Test.init(&.{ 0x0000, 0x00f0 });
+    try std.testing.expectEqual(8, try runner.run("ori.b #$f0,d0"));
+    try std.testing.expectEqual(0xf0, runner.cpu.d[0]);
+    try std.testing.expectEqual(false, runner.cpu.sr.z);
+    try std.testing.expectEqual(true, runner.cpu.sr.n);
 }
