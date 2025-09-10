@@ -82,13 +82,12 @@ pub const Bus = struct {
             limit: std.Io.Limit,
         ) std.Io.Reader.StreamError!usize {
             const this: *@This() = @alignCast(@fieldParentPtr("interface", io_reader));
-            var len: usize = 0;
-            for (limit.slice(try w.writableSliceGreedy(1))) |*dest_byte| {
-                dest_byte.* = this.bus.rdb(this.bus, this.addr);
-                this.addr += 1;
-                len += 1;
+            const dest = limit.slice(try w.writableSliceGreedy(1));
+            for (dest, this.addr..) |*dest_byte, addr| {
+                dest_byte.* = this.bus.rdb(this.bus, @truncate(addr));
             }
-            return len;
+            this.addr += 1;
+            return dest.len;
         }
     };
 };
@@ -113,7 +112,7 @@ const Disasm = struct {
     pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
         const opcode = this.reader.takeInt(u16, .big) catch return error.WriteFailed;
         if (isa.disasm(opcode)) |pfn| {
-            try pfn(writer, this.reader);
+            try pfn(writer, this.reader, opcode);
         } else {
             try writer.print("<invalid opcode>", .{});
         }
@@ -202,7 +201,7 @@ const Instr = struct {
     const Spec = struct {
         enc: Opcode,
         run: *const fn (u16, *Exec) void,
-        disasm: *const fn (*std.io.Writer, *std.io.Reader) std.io.Writer.Error!void,
+        disasm: *const fn (*std.io.Writer, *std.io.Reader, u16) std.io.Writer.Error!void,
 
         fn init(comptime instr: Instr, comptime size: ?Size) @This() {
             const enc = if (instr.size) |enc| switch (enc) {
@@ -220,23 +219,23 @@ const Instr = struct {
                                 const DstOp = Operand(Dst, size);
                                 const src = SrcOp.init(exec, opcode);
                                 var dst = DstOp.init(exec, opcode);
-                                const result = instr.runop(SrcOp.Data, size, exec, .{
+                                const result = runop(instr.op, SrcOp.Data, size, exec, .{
                                     src.data,
                                     dst.data,
                                 });
                                 dst.store(exec, opcode, result);
                             } else {
                                 const src = SrcOp.init(exec, opcode);
-                                _ = instr.runop(SrcOp.Data, size, exec, .{src.data});
+                                _ = runop(instr.op, SrcOp.Data, size, exec, .{src.data});
                             }
                         } else if (instr.dst) |Dst| {
                             const DstOp = Operand(Dst, size);
                             var dst = DstOp.init(exec, opcode);
-                            const result = instr.runop(DstOp.Data, size, exec, .{dst.data});
+                            const result = runop(instr.op, DstOp.Data, size, exec, .{dst.data});
                             dst.store(exec, opcode, result);
                         } else {
                             const Data = if (size) |s| s.Int(.unsigned) else void;
-                            _ = instr.runop(Data, size, exec, .{});
+                            _ = runop(instr.op, Data, size, exec, .{});
                         }
                     }
                 }.run,
@@ -244,8 +243,8 @@ const Instr = struct {
                     fn disasm(
                         writer: *std.io.Writer,
                         reader: *std.io.Reader,
+                        opcode: u16,
                     ) std.io.Writer.Error!void {
-                        const opcode = reader.takeInt(u16, .big) catch return error.WriteFailed;
                         _ = try writer.write(instr.name);
                         if (size) |s| switch (instr.size orelse .{ .fixed = .l }) {
                             .fixed => {},
@@ -253,27 +252,54 @@ const Instr = struct {
                         };
                         if (instr.src) |src| {
                             if (instr.dst) |dst| {
-                                try writer.print(" {f},{f}", .{ src.Disasm(size orelse unreachable){
-                                    .reader = reader,
-                                    .opcode = opcode,
-                                }, dst.Disasm(size orelse unreachable){
-                                    .reader = reader,
-                                    .opcode = opcode,
-                                } });
+                                try writer.print(" {f},{f}", .{
+                                    initdisasm(size, src, reader, opcode),
+                                    initdisasm(size, dst, reader, opcode),
+                                });
                             } else {
-                                try writer.print(" {f}", .{src.Disasm(size orelse unreachable){
-                                    .reader = reader,
-                                    .opcode = opcode,
-                                }});
+                                try writer.print(" {f}", .{initdisasm(size, src, reader, opcode)});
                             }
                         } else if (instr.dst) |dst| {
-                            try writer.print(" {f}", .{dst.Disasm(size orelse unreachable){
-                                .reader = reader,
-                                .opcode = opcode,
-                            }});
+                            try writer.print(" {f}", .{initdisasm(size, dst, reader, opcode)});
                         }
                     }
                 }.disasm,
+            };
+        }
+
+        /// Run a operation handler
+        fn runop(
+            comptime op: ?type,
+            comptime Result: type,
+            comptime size: ?Size,
+            exec: *Exec,
+            targets: anytype,
+        ) Result {
+            const Op = op orelse return if (targets.len > 0) targets[targets.len - 1] else {};
+            const Param = @typeInfo(@TypeOf(Op.op)).@"fn".params[1].type orelse
+                @panic("Expected size as second parameter");
+            return @call(.auto, Op.op, .{
+                exec,
+                if (Param == Size) size orelse @panic("Expected size for instruction target") else size,
+            } ++ targets);
+        }
+
+        /// Initialize the disassembly formatter
+        fn initdisasm(
+            comptime size: ?Size,
+            comptime Target: type,
+            reader: *std.io.Reader,
+            opcode: u16,
+        ) Target.Disasm(if (@typeInfo(@TypeOf(Target.Disasm)).@"fn".params[0].type == ?Size)
+            size
+        else
+            size orelse @compileError("Expected concrete size")) {
+            return Target.Disasm(if (@typeInfo(@TypeOf(Target.Disasm)).@"fn".params[0].type == ?Size)
+                size
+            else
+                size orelse @compileError("Expected concrete size")){
+                .reader = reader,
+                .opcode = opcode,
             };
         }
     };
@@ -296,23 +322,6 @@ const Instr = struct {
         }
         const final = buffer;
         return final[0..perms.items.len];
-    }
-
-    /// Run the operation handler
-    fn runop(
-        comptime this: @This(),
-        comptime Result: type,
-        comptime size: ?Size,
-        exec: *Exec,
-        targets: anytype,
-    ) Result {
-        const Op = this.op orelse return if (targets.len > 0) targets[targets.len - 1] else {};
-        const Param = @typeInfo(@TypeOf(Op.op)).@"fn".params[1].type orelse
-            @panic("Expected size as second parameter");
-        return @call(.auto, Op.op, .{
-            exec,
-            if (Param == Size) size orelse @panic("Expected size for instruction target") else size,
-        } ++ targets);
     }
 };
 
@@ -705,13 +714,13 @@ const Mode = enum {
                             1 => @as(u8, 'l'),
                         } });
                     },
-                    .abs_word => try writer.print("{x:0>4}.w", .{try this.fetch(u16)}),
-                    .abs_long => try writer.print("{x:0>8}.l", .{try this.fetch(u32)}),
+                    .abs_word => try writer.print("(${x:0>4}).w", .{try this.fetch(u16)}),
+                    .abs_long => try writer.print("(${x:0>8}).l", .{try this.fetch(u32)}),
                     .pc_disp => try writer.print("({}, pc)", .{try this.fetch(i16)}),
                     .immediate => switch (size) {
-                        .b => try writer.print("#{x:0>2}", .{try this.fetch(u8)}),
-                        .w => try writer.print("#{x:0>4}", .{try this.fetch(u16)}),
-                        .l => try writer.print("#{x:0>8}", .{try this.fetch(u32)}),
+                        .b => try writer.print("#${x:0>2}", .{try this.fetch(u8)}),
+                        .w => try writer.print("#${x:0>4}", .{try this.fetch(u16)}),
+                        .l => try writer.print("#${x:0>8}", .{try this.fetch(u32)}),
                     },
                 }
             }
@@ -757,15 +766,6 @@ fn EaTarget(m: u4, n: u4) type {
             return struct {
                 reader: *std.io.Reader,
                 opcode: u16,
-
-                fn fetch(this: @This(), comptime Type: type) std.io.Writer.Error!Type {
-                    const Fetch = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Type)));
-                    const fetched = this.reader.takeInt(Fetch, .big) catch return error.WriteFailed;
-                    return @bitCast(@as(
-                        std.meta.Int(.unsigned, @bitSizeOf(Type)),
-                        @truncate(fetched),
-                    ));
-                }
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     const reg = extract(u3, this.opcode, n);
@@ -954,7 +954,7 @@ fn Isa(comptime instrs: []const Instr) type {
         /// Gets the disassembler for the opcode
         pub fn disasm(
             opcode: u16,
-        ) ?*const fn (*std.io.Writer, *std.io.Reader) std.io.Writer.Error!void {
+        ) ?*const fn (*std.io.Writer, *std.io.Reader, u16) std.io.Writer.Error!void {
             return matcher.perms[lut(opcode) orelse return null].disasm;
         }
     };
@@ -1110,8 +1110,19 @@ const Test = struct {
 };
 
 test "add" {
-    var runner = Test.init(&.{0xD000});
+    var runner: Test = undefined;
+
+    // 1) Test that the <instruction> is encoded correctly
+    runner = Test.init(&.{ 0xD038, 0x0080 });
+    Test.wr(&runner.interface, 0x80, u8, 35);
     runner.cpu.d[0] = 10;
-    try std.testing.expectEqual(4, try runner.run("add.b d0,d0"));
-    try std.testing.expectEqual(20, runner.cpu.d[0]);
+    try std.testing.expectEqual(12, try runner.run("add.b ($0080).w,d0"));
+    try std.testing.expectEqual(45, runner.cpu.d[0]);
+
+    // 2) Test that the <instruction> is encoded correctly
+    runner = Test.init(&.{ 0xD1B8, 0x0080 });
+    Test.wr(&runner.interface, 0x80, u32, 350000);
+    runner.cpu.d[0] = 10;
+    try std.testing.expectEqual(24, try runner.run("add.l d0,($0080).w"));
+    try std.testing.expectEqual(350010, Test.rd(&runner.interface, 0x80, u32));
 }
