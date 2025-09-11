@@ -150,6 +150,22 @@ const isa = Isa(&.{
         .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     Instr{
+        .name = "adda",
+        .enc = .init("1101xxxx11xxxxxx"),
+        .src = EaTarget(3, 0, .{
+            .b = .initFill(4),
+            .w = .initFill(4),
+            .l = .initDefault(2, .{
+                .data_reg = 4,
+                .addr_reg = 4,
+                .immediate = 4,
+            }),
+        }),
+        .dst = AddrTarget(9),
+        .op = Adda,
+        .size = Size.Enc{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
+    },
+    Instr{
         .name = "ori",
         .enc = .init("00000000xx111100"),
         .src = ImmTarget,
@@ -251,7 +267,7 @@ const Instr = struct {
                                 const DstOp = Operand(Dst, size);
                                 const src = SrcOp.init(exec, opcode);
                                 var dst = DstOp.init(exec, opcode);
-                                const result = runop(instr.op, SrcOp.Data, size, exec, .{
+                                const result = runop(instr.op, DstOp.Data, size, exec, .{
                                     src.data,
                                     dst.data,
                                 });
@@ -596,20 +612,20 @@ fn AddrTarget(n: u4) type {
     return struct {
         n: u3,
 
-        fn Data(comptime size: Size) type {
-            return size.Int(.unsigned);
+        fn Data(comptime _: Size) type {
+            return u32;
         }
 
         fn init(_: *Exec, comptime _: Size, opcode: u16) @This() {
             return .{ .n = extract(u3, opcode, n) };
         }
 
-        fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
-            return @truncate(exec.cpu.a[this.n]);
+        fn load(this: @This(), exec: *Exec, comptime _: Size, _: u16) u32 {
+            return exec.cpu.a[this.n];
         }
 
-        fn store(this: @This(), exec: *Exec, comptime size: Size, _: u16, data: Data(size)) void {
-            exec.cpu.a[this.n] = extend(u32, data);
+        fn store(this: @This(), exec: *Exec, comptime _: Size, _: u16, data: u32) void {
+            exec.cpu.a[this.n] = data;
         }
 
         fn Disasm(comptime _: Size) type {
@@ -1020,6 +1036,13 @@ const Add = struct {
     }
 };
 
+/// Address addition operation
+const Adda = struct {
+    fn op(_: *Exec, comptime size: Size, src: size.Int(.unsigned), dst: u32) u32 {
+        return extend(u32, src) +% dst;
+    }
+};
+
 /// Normal or operation
 const Or = struct {
     fn op(
@@ -1161,7 +1184,6 @@ fn SparseLut(
     comptime context: anytype,
     comptime getter: fn (@TypeOf(context), Index) ?comptime_int,
 ) type {
-    @setEvalBranchQuota((1 << @bitSizeOf(Index)) * 1000);
     var max = 0;
     for (0..1 << @bitSizeOf(Index)) |i| {
         max = @max(max, getter(context, i) orelse 0);
@@ -1171,6 +1193,7 @@ fn SparseLut(
 
 /// Instruction set architecture faciltates runtime running of instructions and disassembling
 fn Isa(comptime instrs: []const Instr) type {
+    @setEvalBranchQuota(256 * 100000 + (1 << 16) * 1000);
     const matcher = Matcher.init(instrs);
     const lut = sparselut(u16, matcher, struct {
         fn getter(m: Matcher, index: u16) ?comptime_int {
@@ -1380,6 +1403,24 @@ test "abcd dn,dn; abcd -(an),-(an)" {
     try std.testing.expectEqual(false, runner.cpu.sr.z);
     try std.testing.expectEqual(true, runner.cpu.sr.c);
     try std.testing.expectEqual(true, runner.cpu.sr.x);
+}
+
+test "adda.w dn,an; adda.l (an),an" {
+    var runner: Test = undefined;
+
+    // 1) Test that the <instruction> is encoded correctly, and produces correct side effects
+    runner = Test.init(&.{0xd0c0});
+    runner.cpu.d[0] = 0xf000;
+    runner.cpu.a[0] = 0x000f;
+    try std.testing.expectEqual(8, try runner.run("adda.w d0,a0"));
+    try std.testing.expectEqual(0xfffff00f, runner.cpu.a[0]);
+
+    // 2) Test that the <instruction> is encoded correctly, and produces correct side effects
+    runner = Test.init(&.{0xd1d0});
+    runner.cpu.a[0] = 0x80;
+    Test.wr(&runner.interface, 0x80, u32, 0x12340000);
+    try std.testing.expectEqual(14, try runner.run("adda.l (a0),a0"));
+    try std.testing.expectEqual(0x12340080, runner.cpu.a[0]);
 }
 
 test "add ea,dn; add dn,ea" {
