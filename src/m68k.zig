@@ -191,6 +191,74 @@ const isa = Isa(&.{
         .clk = 4,
     },
     Instr{
+        .name = "addx",
+        .enc = .init("1101xxx1xx00xxxx"),
+        .src = RegRegTarget(3, 0, .{}),
+        .dst = RegRegTarget(3, 9, .{ .b = .{ 2, 4 }, .l = .{ 0, 4 } }),
+        .op = Addx,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "and",
+        .enc = .init("1100xxx0xxxxxxxx"),
+        .src = EaTarget(3, 0, .{ .l = .initDefault(2, .{
+            .data_reg = 4,
+            .immediate = 4,
+        }) }),
+        .dst = DataTarget(9),
+        .op = And,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "and",
+        .enc = .init("1100xxx1xxxxxxxx"),
+        .src = DataTarget(9),
+        .dst = EaTarget(3, 0, .{}),
+        .op = And,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "andi",
+        .enc = .init("00000010xx111100"),
+        .src = ImmTarget,
+        .dst = SrTarget,
+        .op = And,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
+        .clk = 12,
+    },
+    Instr{
+        .name = "andi",
+        .enc = .init("00000010xxxxxxxx"),
+        .src = ImmTarget,
+        .dst = EaTarget(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
+        .op = And,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "asl",
+        .enc = .init("1110000111xxxxxx"),
+        .src = ConstTarget(u3, 1),
+        .dst = EaTarget(3, 0, .{}),
+        .op = Asl,
+        .size = Size.Enc{ .fixed = .w },
+    },
+    Instr{
+        .name = "asl",
+        .enc = .init("1110xxx1xx000xxx"),
+        .src = QuickTarget(u3, 9),
+        .dst = DataTarget(0),
+        .op = Asl,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "asl",
+        .enc = .init("1110xxx1xx100xxx"),
+        .src = DataTarget(9),
+        .dst = DataTarget(0),
+        .op = Asl,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
         .name = "ori",
         .enc = .init("00000000xx111100"),
         .src = ImmTarget,
@@ -327,8 +395,10 @@ const Instr = struct {
                             .fixed => {},
                             .dyn => try writer.print(".{s}", .{@tagName(s)}),
                         };
-                        if (instr.src) |src| {
-                            if (instr.dst) |dst| {
+                        const instr_src = if (instr.src) |t| if (@hasDecl(t, "Disasm")) t else null;
+                        const instr_dst = if (instr.dst) |t| if (@hasDecl(t, "Disasm")) t else null;
+                        if (instr_src) |src| {
+                            if (instr_dst) |dst| {
                                 try writer.print(" {f},{f}", .{
                                     initdisasm(size, src, reader, opcode),
                                     initdisasm(size, dst, reader, opcode),
@@ -336,7 +406,7 @@ const Instr = struct {
                             } else {
                                 try writer.print(" {f}", .{initdisasm(size, src, reader, opcode)});
                             }
-                        } else if (instr.dst) |dst| {
+                        } else if (instr_dst) |dst| {
                             try writer.print(" {f}", .{initdisasm(size, dst, reader, opcode)});
                         }
                     }
@@ -401,84 +471,6 @@ const Instr = struct {
         }
         const final = buffer;
         return final[0..perms.items.len];
-    }
-};
-
-/// Updates condition flags
-fn Flags(comptime flags: struct {
-    c: Flag = .keep,
-    v: Flag = .keep,
-    z: Flag = .keep,
-    n: Flag = .keep,
-    x: Flag = .keep,
-}) type {
-    const FlagName = enum { c, v, z, n, x };
-    return struct {
-        pub inline fn apply(status: *Cpu.Status, updates: anytype) void {
-            var set = comptime @as(u5, @intFromBool(flags.c.mask(.set))) << 0 |
-                @as(u5, @intFromBool(flags.v.mask(.set))) << 1 |
-                @as(u5, @intFromBool(flags.z.mask(.set))) << 2 |
-                @as(u5, @intFromBool(flags.n.mask(.set))) << 3 |
-                @as(u5, @intFromBool(flags.x.mask(.set))) << 4;
-            var mask = comptime @as(u5, @intFromBool(flags.c.mask(.overwrite))) << 0 |
-                @as(u5, @intFromBool(flags.v.mask(.overwrite))) << 1 |
-                @as(u5, @intFromBool(flags.z.mask(.overwrite))) << 2 |
-                @as(u5, @intFromBool(flags.n.mask(.overwrite))) << 3 |
-                @as(u5, @intFromBool(flags.x.mask(.overwrite))) << 4;
-            inline for (comptime std.meta.fieldNames(@TypeOf(updates))) |flag| {
-                const pos = @intFromEnum(@field(FlagName, flag));
-                const bit = @intFromBool(@field(updates, flag));
-                switch (@field(flags, flag)) {
-                    .set => set |= @as(u5, bit) << pos,
-                    .clr => mask |= @as(u5, ~bit) << pos,
-                    else => @compileError("Unneeded flag given"),
-                }
-            }
-
-            status.* = @bitCast(@as(u16, @bitCast(status.*)) & ~@as(u16, mask) | set);
-
-            inline for (comptime std.meta.fieldNames(@TypeOf(flags))) |flag| {
-                switch (comptime @field(flags, flag)) {
-                    inline .c, .v, .z, .n, .x => |copy| {
-                        const bits: u16 = @bitCast(status.*);
-                        const src = @intFromEnum(@field(FlagName, @tagName(copy)));
-                        const dst = @intFromEnum(@field(FlagName, flag));
-                        status.* = @bitCast(bits & ~@as(u16, 1 << dst) |
-                            (@as(u16, @as(u1, @truncate(bits >> src))) << dst));
-                    },
-                    else => {},
-                }
-            }
-        }
-    };
-}
-
-/// What updates to do for the flags
-const Flag = enum {
-    /// Do nothing, set to zero, or one always
-    keep,
-    zero,
-    one,
-
-    /// Copy another flag given in the updates list
-    c,
-    v,
-    z,
-    n,
-    x,
-
-    /// Set it or clear
-    set,
-
-    /// Clear it or do nothing
-    clr,
-
-    /// Default bit for a mask
-    fn mask(this: @This(), usage: enum { set, overwrite }) bool {
-        return switch (usage) {
-            .set => this == .zero,
-            .overwrite => this != .keep,
-        };
     }
 };
 
@@ -779,6 +771,25 @@ fn QuickTarget(Int: type, at: u4) type {
     };
 }
 
+/// Source data target that comes from the opcode, only as integers
+fn ConstTarget(Type: type, val: Type) type {
+    return struct {
+        fn Data(comptime _: Size) type {
+            return Type;
+        }
+
+        fn init(_: *Exec, comptime _: Size, _: u16) @This() {
+            return .{};
+        }
+
+        fn load(_: @This(), _: *Exec, comptime _: Size, _: u16) Type {
+            return val;
+        }
+
+        fn store(_: @This(), _: *Exec, comptime _: Size, _: u16, _: Type) void {}
+    };
+}
+
 /// Delays created by evaluating reg-reg operands
 const RegRegDelay = struct {
     b: [2]usize = [2]usize{ 0, 0 },
@@ -1054,14 +1065,9 @@ fn EaTarget(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
 const Abcd = struct {
     fn op(exec: *Exec, comptime _: Size, src: u8, dst: u8) u8 {
         const result = tobcd(frombcd(src) + frombcd(dst) + @intFromBool(exec.cpu.sr.x));
-        Flags(.{
-            .x = .c,
-            .z = .clr,
-            .c = .set,
-        }).apply(&exec.cpu.sr, .{
-            .z = result[0] == 0,
-            .c = result[1],
-        });
+        exec.cpu.sr.x = result[1];
+        exec.cpu.sr.c = result[1];
+        exec.cpu.sr.z = @intFromBool(exec.cpu.sr.z) & @intFromBool(result[1]) == 1;
         return result[0];
     }
 };
@@ -1080,18 +1086,11 @@ const Add = struct {
             @as(size.Int(.signed), @bitCast(dst)),
         )[1] == 1;
         const carry = @addWithOverflow(src, dst)[1] == 1;
-        Flags(.{
-            .x = .c,
-            .n = .set,
-            .z = .set,
-            .v = .set,
-            .c = .set,
-        }).apply(&exec.cpu.sr, .{
-            .n = negative(sum),
-            .z = sum == 0,
-            .v = overflow,
-            .c = carry,
-        });
+        exec.cpu.sr.x = carry;
+        exec.cpu.sr.n = negative(sum);
+        exec.cpu.sr.z = sum == 0;
+        exec.cpu.sr.v = overflow;
+        exec.cpu.sr.c = carry;
         return sum;
     }
 };
@@ -1100,6 +1099,70 @@ const Add = struct {
 const Adda = struct {
     fn op(_: *Exec, comptime size: Size, src: size.Int(.unsigned), dst: u32) u32 {
         return extend(u32, src) +% dst;
+    }
+};
+
+/// Extended addition operation
+const Addx = struct {
+    fn op(
+        exec: *Exec,
+        comptime size: Size,
+        src: size.Int(.unsigned),
+        dst: size.Int(.unsigned),
+    ) size.Int(.unsigned) {
+        const sum = src +% dst +% 1;
+        const overflow = @addWithOverflow(
+            @as(size.Int(.signed), @bitCast(src)),
+            @as(size.Int(.signed), @bitCast(dst +% 1)),
+        )[1] | @addWithOverflow(
+            @as(size.Int(.signed), @bitCast(dst)),
+            @as(size.Int(.signed), 1),
+        )[1] == 1;
+        const carry = @addWithOverflow(src, dst)[1] | @addWithOverflow(dst, 1)[1] == 1;
+        exec.cpu.sr.x = carry;
+        exec.cpu.sr.n = negative(sum);
+        exec.cpu.sr.z = @intFromBool(exec.cpu.sr.z) & @intFromBool(sum == 0) == 1;
+        exec.cpu.sr.v = overflow;
+        exec.cpu.sr.c = carry;
+        return sum;
+    }
+};
+
+/// Bitwise and
+const And = struct {
+    fn op(
+        exec: *Exec,
+        comptime size: Size,
+        src: size.Int(.unsigned),
+        dst: size.Int(.unsigned),
+    ) size.Int(.unsigned) {
+        const result = src & dst;
+        exec.cpu.sr.n = negative(result);
+        exec.cpu.sr.z = result == 0;
+        return result;
+    }
+};
+
+/// Arithmatic shift left
+const Asl = struct {
+    fn op(
+        exec: *Exec,
+        comptime size: Size,
+        shift_amt: size.Int(.unsigned),
+        dst: size.Int(.unsigned),
+    ) size.Int(.unsigned) {
+        const shift: std.math.Log2Int(@TypeOf(dst)) = @truncate(@min(shift_amt, size.bitSize()));
+        const result = dst << shift;
+        const last_bit = @as(u1, @truncate(result >> size.bitSize() - 1 -| shift)) == 1;
+        const ovf_mask = (@as(size.Int(.unsigned), 1) << shift) - 1;
+        const chopped_bits = result >> size.bitSize() - shift;
+        exec.clk += (shift_amt -| 1) * 2;
+        exec.cpu.sr.x = if (shift == 0) exec.cpu.sr.x else last_bit;
+        exec.cpu.sr.n = negative(result);
+        exec.cpu.sr.z = result == 0;
+        exec.cpu.sr.v = chopped_bits == ovf_mask or chopped_bits == 0;
+        exec.cpu.sr.c = last_bit;
+        return result;
     }
 };
 
@@ -1112,15 +1175,10 @@ const Or = struct {
         dst: size.Int(.unsigned),
     ) size.Int(.unsigned) {
         const result = src | dst;
-        Flags(.{
-            .n = .set,
-            .z = .set,
-            .v = .zero,
-            .c = .zero,
-        }).apply(&exec.cpu.sr, .{
-            .n = negative(result),
-            .z = result == 0,
-        });
+        exec.cpu.sr.n = negative(result);
+        exec.cpu.sr.z = result == 0;
+        exec.cpu.sr.v = false;
+        exec.cpu.sr.c = false;
         return result;
     }
 };
@@ -1364,241 +1422,4 @@ inline fn tobcd(byte: u8) struct { u8, bool } {
 /// Converts bcd to a normal byte
 inline fn frombcd(bcd: u8) u8 {
     return ((bcd >> 4) * 10) + (bcd & 0xf);
-}
-
-/// A simple test runner for instructions
-const Test = struct {
-    cpu: Cpu = .{},
-    mem: [1024]u8 = [1]u8{0} ** 1024,
-    interface: Bus = .{
-        .rdb = struct {
-            fn rdb(bus: *Bus, addr: u32) u8 {
-                return rd(bus, addr, u8);
-            }
-        }.rdb,
-        .rdw = struct {
-            fn rdw(bus: *Bus, addr: u32) u16 {
-                return rd(bus, addr, u16);
-            }
-        }.rdw,
-        .rdl = struct {
-            fn rdl(bus: *Bus, addr: u32) u32 {
-                return rd(bus, addr, u32);
-            }
-        }.rdl,
-        .wrb = struct {
-            fn wrb(bus: *Bus, addr: u32, data: u8) void {
-                return wr(bus, addr, u8, data);
-            }
-        }.wrb,
-        .wrw = struct {
-            fn wrw(bus: *Bus, addr: u32, data: u16) void {
-                return wr(bus, addr, u16, data);
-            }
-        }.wrw,
-        .wrl = struct {
-            fn wrl(bus: *Bus, addr: u32, data: u32) void {
-                return wr(bus, addr, u32, data);
-            }
-        }.wrl,
-    },
-
-    /// Initialize with some opcodes and default cpu state
-    fn init(opcodes: []const u16) @This() {
-        var this = @This(){};
-        for (0..opcodes.len) |i| {
-            std.mem.writeInt(u16, this.mem[i * 2 ..][0..2], opcodes[i], .big);
-        }
-        return this;
-    }
-
-    /// Run one instruction
-    fn run(this: *@This(), disasm: []const u8) !usize {
-        var reader_buffer = [1]u8{0} ** 8;
-        var reader = this.interface.reader(0, &reader_buffer);
-        var writer_buffer = std.ArrayList(u8){};
-        var writer = writer_buffer.writer(std.testing.allocator);
-        defer writer_buffer.deinit(std.testing.allocator);
-        try writer.print("{f}", .{
-            Disasm{ .reader = &reader.interface },
-        });
-        try std.testing.expectEqualSlices(u8, disasm, writer_buffer.items);
-        return step(&this.cpu, &this.interface);
-    }
-
-    /// Reading/writing instructions
-    fn rd(bus: *Bus, addr: u32, comptime Data: type) Data {
-        const this: *Test = @fieldParentPtr("interface", bus);
-        return std.mem.readInt(Data, this.mem[addr..][0..@sizeOf(Data)], .big);
-    }
-    fn wr(bus: *Bus, addr: u32, comptime Data: type, data: Data) void {
-        const this: *Test = @fieldParentPtr("interface", bus);
-        std.mem.writeInt(Data, this.mem[addr..][0..@sizeOf(Data)], data, .big);
-    }
-};
-
-test "abcd dn,dn; abcd -(an),-(an)" {
-    var runner: Test = undefined;
-
-    // 1) Test that the <instruction> is encoded correctly, and produces correct side effects
-    runner = Test.init(&.{0xc101});
-    runner.cpu.d[0] = 0x19;
-    runner.cpu.d[1] = 0x23;
-    runner.cpu.sr.z = true;
-    try std.testing.expectEqual(6, try runner.run("abcd d1,d0"));
-    try std.testing.expectEqual(0x42, runner.cpu.d[0]);
-    try std.testing.expectEqual(false, runner.cpu.sr.z);
-    try std.testing.expectEqual(false, runner.cpu.sr.c);
-    try std.testing.expectEqual(false, runner.cpu.sr.x);
-
-    // 2) Test that the <instruction> is encoded correctly, and produces correct side effects
-    runner = Test.init(&.{0xc109});
-    runner.cpu.a[0] = 0x81;
-    runner.cpu.a[1] = 0x82;
-    runner.cpu.sr.z = false;
-    Test.wr(&runner.interface, 0x80, u8, 0x99);
-    Test.wr(&runner.interface, 0x81, u8, 0x01);
-    try std.testing.expectEqual(18, try runner.run("abcd -(a1),-(a0)"));
-    try std.testing.expectEqual(0x00, Test.rd(&runner.interface, 0x80, u8));
-    try std.testing.expectEqual(false, runner.cpu.sr.z);
-    try std.testing.expectEqual(true, runner.cpu.sr.c);
-    try std.testing.expectEqual(true, runner.cpu.sr.x);
-}
-
-test "adda.w dn,an; adda.l (an),an" {
-    var runner: Test = undefined;
-
-    // 1) Test that the <instruction> is encoded correctly, and produces correct side effects
-    runner = Test.init(&.{0xd0c0});
-    runner.cpu.d[0] = 0xf000;
-    runner.cpu.a[0] = 0x000f;
-    try std.testing.expectEqual(8, try runner.run("adda.w d0,a0"));
-    try std.testing.expectEqual(0xfffff00f, runner.cpu.a[0]);
-
-    // 2) Test that the <instruction> is encoded correctly, and produces correct side effects
-    runner = Test.init(&.{0xd1d0});
-    runner.cpu.a[0] = 0x80;
-    Test.wr(&runner.interface, 0x80, u32, 0x12340000);
-    try std.testing.expectEqual(14, try runner.run("adda.l (a0),a0"));
-    try std.testing.expectEqual(0x12340080, runner.cpu.a[0]);
-}
-
-test "add ea,dn; add dn,ea" {
-    var runner: Test = undefined;
-
-    // 1) Test that the <instruction> is encoded correctly
-    runner = Test.init(&.{ 0xD038, 0x0080 });
-    Test.wr(&runner.interface, 0x80, u8, 35);
-    runner.cpu.d[0] = 10;
-    try std.testing.expectEqual(12, try runner.run("add.b ($0080).w,d0"));
-    try std.testing.expectEqual(45, runner.cpu.d[0]);
-
-    // 2) Test that the <instruction> is encoded correctly
-    runner = Test.init(&.{ 0xD1B8, 0x0080 });
-    Test.wr(&runner.interface, 0x80, u32, 350000);
-    runner.cpu.d[0] = 10;
-    try std.testing.expectEqual(24, try runner.run("add.l d0,($0080).w"));
-    try std.testing.expectEqual(350010, Test.rd(&runner.interface, 0x80, u32));
-
-    // 3) Test that the <instruction> produces correct flag side-effects
-    runner = Test.init(&.{0xD001});
-    runner.cpu.d[0] = 0x70;
-    runner.cpu.d[1] = 0x40;
-    try std.testing.expectEqual(4, try runner.run("add.b d1,d0"));
-    try std.testing.expectEqual(0xB0, runner.cpu.d[0]);
-    try std.testing.expectEqual(false, runner.cpu.sr.c);
-    try std.testing.expectEqual(true, runner.cpu.sr.v);
-    try std.testing.expectEqual(false, runner.cpu.sr.z);
-    try std.testing.expectEqual(true, runner.cpu.sr.n);
-    try std.testing.expectEqual(false, runner.cpu.sr.x);
-
-    // 4) Test that the <instruction> produces correct flag side-effects
-    runner = Test.init(&.{0xD001});
-    runner.cpu.d[0] = 0x10;
-    runner.cpu.d[1] = 0xF0;
-    try std.testing.expectEqual(4, try runner.run("add.b d1,d0"));
-    try std.testing.expectEqual(0x00, runner.cpu.d[0]);
-    try std.testing.expectEqual(true, runner.cpu.sr.c);
-    try std.testing.expectEqual(false, runner.cpu.sr.v);
-    try std.testing.expectEqual(true, runner.cpu.sr.z);
-    try std.testing.expectEqual(false, runner.cpu.sr.n);
-    try std.testing.expectEqual(true, runner.cpu.sr.x);
-}
-
-test "addi.w #imm,dn; addi.l #imm,dn; addi.b #imm,(d16,an)" {
-    var runner: Test = undefined;
-
-    // 1) Test that the <instruction> is encoded correctly, and produces correct side effects
-    runner = Test.init(&.{ 0x0640, 50 });
-    runner.cpu.d[0] = 50;
-    try std.testing.expectEqual(8, try runner.run("addi.w #$0032,d0"));
-    try std.testing.expectEqual(100, runner.cpu.d[0]);
-
-    // 2) Test that the <instruction> is encoded correctly, and produces correct side effects
-    runner = Test.init(&.{ 0x0680, 0, 50 });
-    runner.cpu.d[0] = 1000000;
-    try std.testing.expectEqual(16, try runner.run("addi.l #$00000032,d0"));
-    try std.testing.expectEqual(1000050, runner.cpu.d[0]);
-
-    // 3) Test that the <instruction> evaluates operands correctly
-    runner = Test.init(&.{ 0x0628, 50, 0x80 });
-    try std.testing.expectEqual(20, try runner.run("addi.b #$32,(128,a0)"));
-    try std.testing.expectEqual(50, Test.rd(&runner.interface, 0x80, u8));
-}
-
-test "addq #imm,dn; addq #imm,an" {
-    var runner: Test = undefined;
-
-    // 1) Test that the <instruction> is encoded correctly, and produces correct side effects
-    runner = Test.init(&.{ 0x5e00 });
-    runner.cpu.d[0] = 249;
-    try std.testing.expectEqual(4, try runner.run("addq.b #7,d0"));
-    try std.testing.expectEqual(0, runner.cpu.d[0]);
-    try std.testing.expectEqual(true, runner.cpu.sr.c);
-    try std.testing.expectEqual(true, runner.cpu.sr.z);
-
-    // 2) Test that the <instruction> is encoded correctly, and produces correct side effects
-    runner = Test.init(&.{ 0x5e48 });
-    runner.cpu.a[0] = 0xffffffff;
-    try std.testing.expectEqual(8, try runner.run("addq.w #7,a0"));
-    try std.testing.expectEqual(6, runner.cpu.a[0]);
-    try std.testing.expectEqual(false, runner.cpu.sr.c);
-}
-
-test "ori #imm,ccr; ori #imm,sr; ori #imm,ea" {
-    var runner: Test = undefined;
-
-    // 1) Test that the <instruction> is encoded correctly, and has correct side effects
-    runner = Test.init(&.{ 0x003c, 0x007f });
-    try std.testing.expectEqual(20, try runner.run("ori.b #$7f,ccr"));
-    try std.testing.expectEqual(true, runner.cpu.sr.c);
-    try std.testing.expectEqual(true, runner.cpu.sr.v);
-    try std.testing.expectEqual(true, runner.cpu.sr.z);
-    try std.testing.expectEqual(true, runner.cpu.sr.n);
-    try std.testing.expectEqual(true, runner.cpu.sr.x);
-
-    // 2) Test that the <instruction> is encoded correctly, and has correct side effects
-    runner = Test.init(&.{ 0x007c, 0xff0f });
-    try std.testing.expectEqual(20, try runner.run("ori.w #$ff0f,sr"));
-    try std.testing.expectEqual(true, runner.cpu.sr.c);
-    try std.testing.expectEqual(true, runner.cpu.sr.v);
-    try std.testing.expectEqual(true, runner.cpu.sr.z);
-    try std.testing.expectEqual(true, runner.cpu.sr.n);
-    try std.testing.expectEqual(false, runner.cpu.sr.x);
-    try std.testing.expectEqual(7, runner.cpu.sr.ipl);
-
-    // 3) Test that the <instruction> is encoded correctly, and has correct side effects
-    runner = Test.init(&.{ 0x0000, 0x00f0 });
-    try std.testing.expectEqual(8, try runner.run("ori.b #$f0,d0"));
-    try std.testing.expectEqual(0xf0, runner.cpu.d[0]);
-    try std.testing.expectEqual(false, runner.cpu.sr.z);
-    try std.testing.expectEqual(true, runner.cpu.sr.n);
-}
-
-test "nop" {
-    var runner: Test = undefined;
-
-    // 1) Test that the <instruction> is encoded correctly
-    runner = Test.init(&.{0x4e71});
-    try std.testing.expectEqual(4, try runner.run("nop"));
 }
