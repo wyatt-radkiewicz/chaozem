@@ -174,12 +174,30 @@ const isa = Isa(&.{
         .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     Instr{
+        .name = "addq",
+        .enc = .init("0101xxx0xxxxxxxx"),
+        .src = QuickTarget(u3, 9),
+        .dst = EaTarget(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
+        .op = Add,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
+        .name = "addq",
+        .enc = .init("0101xxx0xx001xxx"),
+        .src = QuickTarget(u3, 9),
+        .dst = AddrTarget(0),
+        .op = Adda,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
+        .clk = 4,
+    },
+    Instr{
         .name = "ori",
         .enc = .init("00000000xx111100"),
         .src = ImmTarget,
-        .dst = SrTarget(12),
+        .dst = SrTarget,
         .op = Or,
         .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
+        .clk = 12,
     },
     Instr{
         .name = "ori",
@@ -209,6 +227,8 @@ const Instr = struct {
     op: ?type = null,
     /// The size(s) of the instruction
     size: ?Size.Enc = null,
+    /// Any extra cycles to add to the instruction execution
+    clk: usize = 0,
 
     /// Runtime operand
     fn Operand(comptime Target: type, comptime size: ?Size) type {
@@ -269,6 +289,7 @@ const Instr = struct {
                 .enc = enc,
                 .run = struct {
                     pub fn run(opcode: u16, exec: *Exec) void {
+                        exec.clk += instr.clk;
                         if (instr.src) |Src| {
                             const SrcOp = Operand(Src, size);
                             if (instr.dst) |Dst| {
@@ -650,46 +671,43 @@ fn AddrTarget(n: u4) type {
 }
 
 /// Status register source or destination target
-fn SrTarget(comptime delay: usize) type {
-    return struct {
-        fn Data(comptime size: Size) type {
-            return switch (size) {
-                .l => @compileError("Status register is only 16 bits!"),
-                else => size.Int(.unsigned),
-            };
-        }
+const SrTarget = struct {
+    fn Data(comptime size: Size) type {
+        return switch (size) {
+            .l => @compileError("Status register is only 16 bits!"),
+            else => size.Int(.unsigned),
+        };
+    }
 
-        fn init(exec: *Exec, comptime _: Size, _: u16) @This() {
-            exec.clk += delay;
-            return .{};
-        }
+    fn init(_: *Exec, comptime _: Size, _: u16) @This() {
+        return .{};
+    }
 
-        fn load(_: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
-            const bits: u16 = @bitCast(exec.cpu.sr);
-            return @truncate(bits);
-        }
+    fn load(_: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
+        const bits: u16 = @bitCast(exec.cpu.sr);
+        return @truncate(bits);
+    }
 
-        fn store(_: @This(), exec: *Exec, comptime size: Size, _: u16, data: Data(size)) void {
-            const bits: u16 = @bitCast(exec.cpu.sr);
-            exec.cpu.sr = @bitCast(overwrite(bits, data));
-        }
+    fn store(_: @This(), exec: *Exec, comptime size: Size, _: u16, data: Data(size)) void {
+        const bits: u16 = @bitCast(exec.cpu.sr);
+        exec.cpu.sr = @bitCast(overwrite(bits, data));
+    }
 
-        fn Disasm(comptime size: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
+    fn Disasm(comptime size: Size) type {
+        return struct {
+            reader: *std.io.Reader,
+            opcode: u16,
 
-                pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{s}", .{switch (size) {
-                        .b => "ccr",
-                        .w => "sr",
-                        .l => @compileError("Expected byte or word with status register disasm!"),
-                    }});
-                }
-            };
-        }
-    };
-}
+            pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                try writer.print("{s}", .{switch (size) {
+                    .b => "ccr",
+                    .w => "sr",
+                    .l => @compileError("Expected byte or word with status register disasm!"),
+                }});
+            }
+        };
+    }
+};
 
 /// Immediate source data target
 const ImmTarget = struct {
@@ -726,6 +744,40 @@ const ImmTarget = struct {
         };
     }
 };
+
+/// Source data target that comes from the opcode, only as integers
+fn QuickTarget(Int: type, at: u4) type {
+    return struct {
+        fn Data(comptime size: Size) type {
+            return size.Int(.unsigned);
+        }
+
+        fn init(_: *Exec, comptime _: Size, _: u16) @This() {
+            return .{};
+        }
+
+        fn load(_: @This(), _: *Exec, comptime size: Size, opcode: u16) Data(size) {
+            const int = extract(Int, opcode, at);
+            return switch (@typeInfo(Int).int.signedness) {
+                .signed => extend(Data(size), int),
+                .unsigned => int,
+            };
+        }
+
+        fn store(_: @This(), _: *Exec, comptime size: Size, _: u16, _: Data(size)) void {}
+
+        fn Disasm(comptime _: Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    try writer.print("#{}", .{extract(Int, this.opcode, at)});
+                }
+            };
+        }
+    };
+}
 
 /// Delays created by evaluating reg-reg operands
 const RegRegDelay = struct {
@@ -1492,6 +1544,25 @@ test "addi.w #imm,dn; addi.l #imm,dn; addi.b #imm,(d16,an)" {
     runner = Test.init(&.{ 0x0628, 50, 0x80 });
     try std.testing.expectEqual(20, try runner.run("addi.b #$32,(128,a0)"));
     try std.testing.expectEqual(50, Test.rd(&runner.interface, 0x80, u8));
+}
+
+test "addq #imm,dn; addq #imm,an" {
+    var runner: Test = undefined;
+
+    // 1) Test that the <instruction> is encoded correctly, and produces correct side effects
+    runner = Test.init(&.{ 0x5e00 });
+    runner.cpu.d[0] = 249;
+    try std.testing.expectEqual(4, try runner.run("addq.b #7,d0"));
+    try std.testing.expectEqual(0, runner.cpu.d[0]);
+    try std.testing.expectEqual(true, runner.cpu.sr.c);
+    try std.testing.expectEqual(true, runner.cpu.sr.z);
+
+    // 2) Test that the <instruction> is encoded correctly, and produces correct side effects
+    runner = Test.init(&.{ 0x5e48 });
+    runner.cpu.a[0] = 0xffffffff;
+    try std.testing.expectEqual(8, try runner.run("addq.w #7,a0"));
+    try std.testing.expectEqual(6, runner.cpu.a[0]);
+    try std.testing.expectEqual(false, runner.cpu.sr.c);
 }
 
 test "ori #imm,ccr; ori #imm,sr; ori #imm,ea" {
