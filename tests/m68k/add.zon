@@ -1,0 +1,150 @@
+.{
+    .{
+        .config = .{
+            .code = .{0xc101},
+            .data = .{ 0x19, 0x23 },
+            .status = .{ .z = true },
+        },
+        .expect = .{
+            .clk = 6,
+            .disasm = "abcd d1,d0",
+            .data = .{ 0x42, 0x23 },
+            .status = .{},
+        },
+    },
+    .{
+        .config = .{
+            .code = .{0xc109},
+            .addr = .{ 0x81, 0x82 },
+            .ram = .{ 0x99, 0x01 },
+        },
+        .expect = .{
+            .clk = 18,
+            .disasm = "abcd -(a1),-(a0)",
+            .addr = .{ 0x80, 0x81 },
+            .ram = .{ 0x00, 0x01 },
+            .status = .{ .z = false, .c = true, .x = true },
+        },
+    },
+    .{
+        .config = .{
+            .code = .{ 0xD038, 0x0080 },
+            .data = .{10},
+            .ram = .{35},
+        },
+        .expect = .{
+            .clk = 12,
+            .disasm = "add.b ($0080).w,d0",
+            .data = .{45},
+            .ram = .{35},
+        },
+    },
+    .{
+        .config = .{
+            .code = .{ 0xD1B8, 0x0080 },
+            .ram = .{ 0x00, 0x05, 0x57, 0x30 },
+            .data = .{10},
+        },
+        .expect = .{
+            .clk = 24,
+            .disasm = "add.l d0,($0080).w",
+            .ram = .{ 0x00, 0x05, 0x57, 0x3A },
+        },
+    },
+    .{
+        .config = .{
+            .code = .{0xD001},
+            .data = .{ 0x70, 0x40 },
+        },
+        .expect = .{
+            .clk = 4,
+            .disasm = "add.b d1,d0",
+            .data = .{ 0xB0, 0x40 },
+            .status = .{ .v = true, .n = true },
+        },
+    },
+    .{
+        .config = .{
+            .code = .{0xD001},
+            .data = .{ 0x10, 0xF0 },
+        },
+        .expect = .{
+            .clk = 4,
+            .disasm = "add.b d1,d0",
+            .data = .{ 0x00, 0xF0 },
+            .status = .{ .c = true, .z = true, .x = true },
+        },
+    },
+    .{
+        .config = .{
+            .code = .{ 0x0640, 50 },
+            .data = .{50},
+        },
+        .expect = .{
+            .clk = 8,
+            .disasm = "addi.w #$0032,d0",
+            .data = .{100},
+        },
+    },
+    .{
+        .config = .{
+            .code = .{ 0x0680, 0x0000, 0x0032 },
+            .data = .{1000000},
+        },
+        .expect = .{
+            .clk = 16,
+            .disasm = "addi.l #$00000032,d0",
+            .data = .{1000050},
+        },
+    },
+    .{
+        .config = .{
+            .code = .{ 0x0628, 0x0032, 0x0080 },
+        },
+        .expect = .{
+            .clk = 20,
+            .disasm = "addi.b #$32,(128,a0)",
+            .ram = .{50},
+        },
+    },
+    .{
+        .config = .{
+            .code = .{0x5e00},
+            .data = .{249},
+        },
+        .expect = .{
+            .clk = 4,
+            .disasm = "addq.b #7,d0",
+            .data = .{0},
+            .status = .{ .c = true, .z = true, .x = true },
+        },
+    },
+    .{
+        .config = .{
+            .code = .{0x5e48},
+            .addr = .{0xffffffff},
+        },
+        .expect = .{
+            .clk = 8,
+            .disasm = "addq.w #7,a0",
+            .addr = .{6},
+            .status = .{},
+        },
+    },
+    .{
+        .config = .{
+            .code = .{ 0xd109, 0xd109 },
+            .addr = .{ 0x82, 0x84 },
+            .ram = .{ 0x0F, 0x01, 0x00, 0xFF },
+        },
+        .expect = .{
+            .clk = 36,
+            .disasm =
+            \\addx.b -(a1),-(a0)
+            \\addx.b -(a1),-(a0)
+            ,
+            .addr = .{ 0x80, 0x82 },
+            .ram = .{ 0x10, 0x00, 0x00, 0xFF },
+        },
+    },
+}

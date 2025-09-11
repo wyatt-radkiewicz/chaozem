@@ -1,0 +1,11 @@
+.{
+    .{
+        .config = .{
+            .code = .{0x4e71},
+        },
+        .expect = .{
+            .clk = 4,
+            .disasm = "nop",
+        },
+    },
+}
