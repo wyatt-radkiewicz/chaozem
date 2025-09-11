@@ -166,6 +166,14 @@ const isa = Isa(&.{
         .size = Size.Enc{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
     },
     Instr{
+        .name = "addi",
+        .enc = .init("00000110xxxxxxxx"),
+        .src = ImmTarget,
+        .dst = EaTarget(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
+        .op = Add,
+        .size = Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    Instr{
         .name = "ori",
         .enc = .init("00000000xx111100"),
         .src = ImmTarget,
@@ -879,20 +887,20 @@ const Mode = enum {
                     .indirect => try writer.print("(a{})", .{this.reg}),
                     .post_inc => try writer.print("(a{})+", .{this.reg}),
                     .pre_dec => try writer.print("-(a{})", .{this.reg}),
-                    .addr_disp => try writer.print("({}, a{})", .{
+                    .addr_disp => try writer.print("({},a{})", .{
                         this.reader.takeInt(i16, .big) catch return error.WriteFailed,
                         this.reg,
                     }),
                     .addr_idx, .pc_idx => |mode| {
                         const idx: Index = @bitCast(this.reader.takeInt(u16, .big) catch
                             return error.WriteFailed);
-                        try writer.print("({}, ", .{idx.disp});
+                        try writer.print("({},", .{idx.disp});
                         switch (mode) {
                             .addr_idx => try writer.print("a{}", .{this.reg}),
                             .pc_idx => try writer.print("pc", .{}),
                             else => unreachable,
                         }
-                        try writer.print(", {c}{}.{c})", .{ switch (idx.m) {
+                        try writer.print(",{c}{}.{c})", .{ switch (idx.m) {
                             0 => @as(u8, 'd'),
                             1 => @as(u8, 'a'),
                         }, idx.n, switch (idx.size) {
@@ -1463,6 +1471,27 @@ test "add ea,dn; add dn,ea" {
     try std.testing.expectEqual(true, runner.cpu.sr.z);
     try std.testing.expectEqual(false, runner.cpu.sr.n);
     try std.testing.expectEqual(true, runner.cpu.sr.x);
+}
+
+test "addi.w #imm,dn; addi.l #imm,dn; addi.b #imm,(d16,an)" {
+    var runner: Test = undefined;
+
+    // 1) Test that the <instruction> is encoded correctly, and produces correct side effects
+    runner = Test.init(&.{ 0x0640, 50 });
+    runner.cpu.d[0] = 50;
+    try std.testing.expectEqual(8, try runner.run("addi.w #$0032,d0"));
+    try std.testing.expectEqual(100, runner.cpu.d[0]);
+
+    // 2) Test that the <instruction> is encoded correctly, and produces correct side effects
+    runner = Test.init(&.{ 0x0680, 0, 50 });
+    runner.cpu.d[0] = 1000000;
+    try std.testing.expectEqual(16, try runner.run("addi.l #$00000032,d0"));
+    try std.testing.expectEqual(1000050, runner.cpu.d[0]);
+
+    // 3) Test that the <instruction> evaluates operands correctly
+    runner = Test.init(&.{ 0x0628, 50, 0x80 });
+    try std.testing.expectEqual(20, try runner.run("addi.b #$32,(128,a0)"));
+    try std.testing.expectEqual(50, Test.rd(&runner.interface, 0x80, u8));
 }
 
 test "ori #imm,ccr; ori #imm,sr; ori #imm,ea" {
