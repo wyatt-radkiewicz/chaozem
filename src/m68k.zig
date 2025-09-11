@@ -122,6 +122,14 @@ const Disasm = struct {
 /// M68k instruction set architecture
 const isa = Isa(&.{
     Instr{
+        .name = "abcd",
+        .enc = .init("1100xxx10000xxxx"),
+        .src = RegRegTarget(3, 0, .{}),
+        .dst = RegRegTarget(3, 9, .{ .b = .{ 2, 2 } }),
+        .op = Abcd,
+        .size = Size.Enc{ .fixed = .b },
+    },
+    Instr{
         .name = "add",
         .enc = .init("1101xxx0xxxxxxxx"),
         .src = EaTarget(3, 0, .{ .l = .initDefault(2, .{
@@ -695,6 +703,69 @@ const ImmTarget = struct {
     }
 };
 
+/// Delays created by evaluating reg-reg operands
+const RegRegDelay = struct {
+    b: [2]usize = [2]usize{ 0, 0 },
+    w: [2]usize = [2]usize{ 0, 0 },
+    l: [2]usize = [2]usize{ 0, 0 },
+
+    /// Gets the delay for the mode and size combination
+    fn delay(comptime this: @This(), comptime size: Size, mode: u1) usize {
+        return @field(this, @tagName(size))[mode];
+    }
+};
+
+/// Specialized register to register source and destination target
+fn RegRegTarget(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type {
+    return struct {
+        mode: u1,
+        reg: u3,
+
+        fn Data(comptime size: Size) type {
+            return size.Int(.unsigned);
+        }
+
+        fn init(exec: *Exec, comptime size: Size, opcode: u16) @This() {
+            const mode = extract(u1, opcode, m);
+            const reg = extract(u3, opcode, n);
+            exec.clk += delay.delay(size, mode);
+            if (mode == 1) {
+                exec.cpu.a[reg] -= size.bitSize() / 8;
+            }
+            return .{ .mode = mode, .reg = reg };
+        }
+
+        fn load(this: @This(), exec: *Exec, comptime size: Size, _: u16) Data(size) {
+            return switch (this.mode) {
+                0 => @truncate(exec.cpu.d[this.reg]),
+                1 => exec.read(Data(size), exec.cpu.a[this.reg]),
+            };
+        }
+
+        fn store(this: @This(), exec: *Exec, comptime size: Size, _: u16, data: Data(size)) void {
+            switch (this.mode) {
+                0 => exec.cpu.d[this.reg] = overwrite(exec.cpu.d[this.reg], data),
+                1 => exec.write(Data(size), exec.cpu.a[this.reg], data),
+            }
+        }
+
+        fn Disasm(comptime _: Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    const reg = extract(u3, this.opcode, n);
+                    switch (extract(u1, this.opcode, m)) {
+                        0 => try writer.print("d{}", .{reg}),
+                        1 => try writer.print("-(a{})", .{reg}),
+                    }
+                }
+            };
+        }
+    };
+}
+
 /// Address modes
 const Mode = enum {
     data_reg,
@@ -902,6 +973,22 @@ fn EaTarget(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
         }
     };
 }
+
+/// Binary decimal add operation
+const Abcd = struct {
+    fn op(exec: *Exec, comptime _: Size, src: u8, dst: u8) u8 {
+        const result = tobcd(frombcd(src) + frombcd(dst) + @intFromBool(exec.cpu.sr.x));
+        Flags(.{
+            .x = .c,
+            .z = .clr,
+            .c = .set,
+        }).apply(&exec.cpu.sr, .{
+            .z = result[0] == 0,
+            .c = result[1],
+        });
+        return result[0];
+    }
+};
 
 /// Normal addition operation
 const Add = struct {
@@ -1183,6 +1270,19 @@ inline fn negative(int: anytype) bool {
     return @as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(int))), @bitCast(int)) < 0;
 }
 
+/// Converts a byte to a binary coded decimal byte
+/// It will return a struct encoding the wrapped bcd byte and if an overflow occurred
+inline fn tobcd(byte: u8) struct { u8, bool } {
+    const carry = byte > 99;
+    const wrapped = byte % 100;
+    return .{ ((wrapped / 10) << 4) + (wrapped % 10), carry };
+}
+
+/// Converts bcd to a normal byte
+inline fn frombcd(bcd: u8) u8 {
+    return ((bcd >> 4) * 10) + (bcd & 0xf);
+}
+
 /// A simple test runner for instructions
 const Test = struct {
     cpu: Cpu = .{},
@@ -1254,6 +1354,34 @@ const Test = struct {
     }
 };
 
+test "abcd dn,dn; abcd -(an),-(an)" {
+    var runner: Test = undefined;
+
+    // 1) Test that the <instruction> is encoded correctly, and produces correct side effects
+    runner = Test.init(&.{0xc101});
+    runner.cpu.d[0] = 0x19;
+    runner.cpu.d[1] = 0x23;
+    runner.cpu.sr.z = true;
+    try std.testing.expectEqual(6, try runner.run("abcd d1,d0"));
+    try std.testing.expectEqual(0x42, runner.cpu.d[0]);
+    try std.testing.expectEqual(false, runner.cpu.sr.z);
+    try std.testing.expectEqual(false, runner.cpu.sr.c);
+    try std.testing.expectEqual(false, runner.cpu.sr.x);
+
+    // 2) Test that the <instruction> is encoded correctly, and produces correct side effects
+    runner = Test.init(&.{0xc109});
+    runner.cpu.a[0] = 0x81;
+    runner.cpu.a[1] = 0x82;
+    runner.cpu.sr.z = false;
+    Test.wr(&runner.interface, 0x80, u8, 0x99);
+    Test.wr(&runner.interface, 0x81, u8, 0x01);
+    try std.testing.expectEqual(18, try runner.run("abcd -(a1),-(a0)"));
+    try std.testing.expectEqual(0x00, Test.rd(&runner.interface, 0x80, u8));
+    try std.testing.expectEqual(false, runner.cpu.sr.z);
+    try std.testing.expectEqual(true, runner.cpu.sr.c);
+    try std.testing.expectEqual(true, runner.cpu.sr.x);
+}
+
 test "add ea,dn; add dn,ea" {
     var runner: Test = undefined;
 
@@ -1296,14 +1424,6 @@ test "add ea,dn; add dn,ea" {
     try std.testing.expectEqual(true, runner.cpu.sr.x);
 }
 
-test "nop" {
-    var runner: Test = undefined;
-
-    // 1) Test that the <instruction> is encoded correctly
-    runner = Test.init(&.{0x4e71});
-    try std.testing.expectEqual(4, try runner.run("nop"));
-}
-
 test "ori #imm,ccr; ori #imm,sr; ori #imm,ea" {
     var runner: Test = undefined;
 
@@ -1332,4 +1452,12 @@ test "ori #imm,ccr; ori #imm,sr; ori #imm,ea" {
     try std.testing.expectEqual(0xf0, runner.cpu.d[0]);
     try std.testing.expectEqual(false, runner.cpu.sr.z);
     try std.testing.expectEqual(true, runner.cpu.sr.n);
+}
+
+test "nop" {
+    var runner: Test = undefined;
+
+    // 1) Test that the <instruction> is encoded correctly
+    runner = Test.init(&.{0x4e71});
+    try std.testing.expectEqual(4, try runner.run("nop"));
 }
