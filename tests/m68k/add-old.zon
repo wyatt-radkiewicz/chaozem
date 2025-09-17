@@ -147,4 +147,16 @@
             .ram = .{ 0x10, 0x00, 0x00, 0xFF },
         },
     },
+    .{
+        .config = .{
+            .code = .{0xc041},
+            .data = .{ 0xffff, 0xf234 },
+        },
+        .expect = .{
+            .clk = 4,
+            .disasm = "and.w d1,d0",
+            .data = .{ 0xf234, 0xf234 },
+            .status = .{ .n = true },
+        },
+    },
 }
