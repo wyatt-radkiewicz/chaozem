@@ -67,5 +67,11 @@ pub fn build(b: *std.Build) !void {
     const opts = Options.init(b);
     const test_step = b.step("test", "run the module tests");
     const page_mod = try Module.init(b, "page", opts, test_step, &.{});
-    _ = try Module.init(b, "bus", opts, test_step, &.{page_mod});
+    const int_mod = try Module.init(b, "int", opts, test_step, &.{});
+    const bus_mod = try Module.init(b, "bus", opts, test_step, &.{page_mod});
+    _ = try Module.init(b, "m68k", opts, test_step, &.{
+        page_mod,
+        int_mod,
+        bus_mod,
+    });
 }

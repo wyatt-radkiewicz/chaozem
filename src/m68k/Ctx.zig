@@ -1,7 +1,8 @@
 /// M68K execution context
 const std = @import("std");
-const Cpu = @import("Cpu.zig");
+
 const Bus = @import("Bus.zig");
+const Cpu = @import("Cpu.zig");
 
 cpu: *Cpu,
 bus: *Bus,
@@ -9,11 +10,11 @@ clk: usize = 0,
 
 /// M68K operation sizes
 const Size = enum {
-    /// Byte
+    /// Byte (8 bits)
     b,
-    /// Word
+    /// Word (16 bits)
     w,
-    /// Long
+    /// Long (32 bits)
     l,
 
     /// Get the integer type for this operation size
@@ -32,6 +33,8 @@ const Size = enum {
 
     /// M68K size encodings
     const Enc = union(enum) {
+        /// Sizeless instruction
+        none: void,
         /// Fixed size at compile time
         fixed: Size,
         /// Size determined from bits at a position in the opcode
@@ -50,6 +53,7 @@ const Size = enum {
         /// Decodes a size, and returns null if there was no encoding for the bits given
         fn decode(comptime this: @This(), opcode: u16) ?Size {
             return switch (this) {
+                .none => null,
                 .fixed => |size| size,
                 .dyn => |enc| blk: {
                     const map = comptime build: {
@@ -69,7 +73,7 @@ const Size = enum {
         /// Encodes a size and returns the set bits
         fn encode(comptime this: @This(), size: Size) this.Type() {
             return switch (this) {
-                .fixed => {},
+                .none, .fixed => {},
                 .dyn => |enc| switch (size) {
                     inline else => |s| @field(enc, @tagName(s)) orelse 0 << enc.at,
                 },
@@ -79,7 +83,7 @@ const Size = enum {
         /// Gets the biggest encoding value
         fn biggestEncoding(comptime this: @This()) ?comptime_int {
             return switch (this) {
-                .fixed => null,
+                .none, .fixed => null,
                 .dyn => |enc| @max(enc.b orelse 0, enc.w orelse 0, enc.l orelse 0),
             };
         }
@@ -151,32 +155,6 @@ inline fn pop(this: *@This(), comptime Data: type) Data {
     const data = this.read(Push, this.cpu.a[7]);
     this.cpu.a[7] +%= @sizeOf(Push);
     return @bitCast(@as(std.meta.Int(.unsigned, @bitSizeOf(Data)), @truncate(data)));
-}
-
-/// Extract a type from an integer at a position
-inline fn extract(comptime Type: type, from: anytype, at: std.math.Log2Int(@TypeOf(from))) Type {
-    const TypeInt = std.meta.Int(.unsigned, @bitSizeOf(Type));
-    const FromInt = std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(from)));
-    return @bitCast(@as(TypeInt, @truncate(@as(FromInt, @bitCast(from)) >> at)));
-}
-
-/// Sign extend a specified integer to the specified size
-inline fn extend(comptime To: type, from: anytype) To {
-    const ToSigned = std.meta.Int(.signed, @bitSizeOf(To));
-    const FromSigned = std.meta.Int(.signed, @bitSizeOf(@TypeOf(from)));
-    return @bitCast(@as(ToSigned, @as(FromSigned, @bitCast(from))));
-}
-
-/// Overwrite the lower N bits with another integer
-inline fn overwrite(int: anytype, with: anytype) @TypeOf(int) {
-    const Int = std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(int)));
-    const mask: Int = (1 << @bitSizeOf(@TypeOf(with))) - 1;
-    return int & ~mask | with;
-}
-
-/// Returns true if the int has the highest bit set
-inline fn negative(int: anytype) bool {
-    return @as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(int))), @bitCast(int)) < 0;
 }
 
 /// Converts a byte to a binary coded decimal byte
