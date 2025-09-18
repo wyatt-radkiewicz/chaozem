@@ -29,6 +29,7 @@ pub fn Mapping(comptime width: Width) type {
         start: width.Addr(),
 
         /// Size of the memory region before it starts mirroring (minus 1).
+        /// This must be a multiple of two otherwise mirroring won't work.
         size: width.Addr(),
 
         /// What is the end (inclusive) of this memory region? It will mirror `size` until this end.
@@ -58,10 +59,12 @@ pub fn Bus(comptime width: Width) type {
         mappings: []const Mapping(width),
         map: *const fn (width.Addr()) ?usize,
 
+        const This = @This();
+
         /// Initialize a new bus network with the following mapping and devices. A mapping must be
         /// specified at compile time to create a fast look up table. Device interfaces are provided
         /// at runtime and correspond with the mappings provided.
-        pub fn init(comptime map: []const Mapping(width), devices: []const *Device(width)) @This() {
+        pub fn init(comptime map: []const Mapping(width), devices: []const *Device(width)) This {
             // Get the mapping page table function
             const mapFn = page_table.table(.{
                 .Index = width.Addr(),
@@ -89,7 +92,7 @@ pub fn Bus(comptime width: Width) type {
         }
 
         /// Read some data from the bus
-        pub fn read(this: @This(), addr: width.Addr(), mask: width.Data()) ?width.Data() {
+        pub fn read(this: This, addr: width.Addr(), mask: width.Data()) ?width.Data() {
             const index = this.map(addr) orelse return null;
             const rd = this.devices[index].read orelse return null;
             const mapping = this.mappings[index];
@@ -97,16 +100,67 @@ pub fn Bus(comptime width: Width) type {
         }
 
         /// Write some data to the bus
-        pub fn write(
-            this: @This(),
-            addr: width.Addr(),
-            mask: width.Data(),
-            data: width.Data(),
-        ) void {
+        pub fn write(this: This, addr: width.Addr(), mask: width.Data(), data: width.Data()) void {
             const index = this.map(addr) orelse return null;
             const wr = this.devices[index].write orelse return null;
             const mapping = this.mappings[index];
             wr(this.devices[index], (addr - mapping.start) & (mapping.size - 1), mask, data);
         }
+
+        /// Get a reader interface starting reading at `addr` spot.
+        /// Since the reader buffers in data in chunks of the data width, an endianess must
+        /// be provided for the bus data. Due to this, the buffer provided must be at least of the
+        /// length of the data bus width. The `step` value is how much to change `addr` by every
+        /// time data from the bus is written to the buffer.
+        pub fn reader(
+            this: *const This,
+            addr: width.Addr(),
+            buffer: []u8,
+            endian: std.builtin.Endian,
+            step: width.Addr(),
+        ) Reader {
+            return Reader{
+                .bus = this,
+                .addr = addr,
+                .step = step,
+                .endian = endian,
+                .interface = .{
+                    .vtable = &.{
+                        .stream = Reader.stream,
+                    },
+                    .buffer = buffer,
+                    .seek = 0,
+                    .end = 0,
+                },
+            };
+        }
+
+        /// The bus bytes reader interface implementation
+        const Reader = struct {
+            bus: *const This,
+            addr: width.Addr(),
+            step: width.Addr(),
+            endian: std.builtin.Endian,
+            interface: std.io.Reader,
+
+            /// Standard reader stream implementation
+            pub fn stream(
+                interface: *std.Io.Reader,
+                writer: *std.Io.Writer,
+                limit: std.Io.Limit,
+            ) std.Io.Reader.StreamError!usize {
+                const this: *@This() = @alignCast(@fieldParentPtr("interface", interface));
+                const size = width.data / 8;
+                const dest = limit.slice(try writer.writableSliceGreedy(size));
+                std.debug.assert(dest.len % size == 0);
+
+                for (0..dest.len / size) |i| {
+                    const data = this.bus.read(this.addr, std.math.maxInt(width.Data())) orelse 0;
+                    std.mem.writeInt(width.Data(), dest[i * size ..][0..size], data, this.endian);
+                    this.addr +%= this.step;
+                }
+                return dest.len;
+            }
+        };
     };
 }

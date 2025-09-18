@@ -69,16 +69,21 @@ fn BuildInfo(comptime options: Options) type {
 /// - `ctx` is a type that has the function:
 ///     pub fn get(this: @This(), Index) Entry
 fn buildTable(comptime options: Options, comptime ctx: anytype) BuildInfo(options) {
-    // Set the branch eval quota
+    // Set the branch eval quota and check parameters
     @setEvalBranchQuota(options.max_pages * 100000);
-    
+
     // Create the backing buffer so we can generate the first pass of the table
     var page_buffer: [options.max_pages]options.Page() = undefined;
     var pages = std.ArrayList(options.Page()).initBuffer(&page_buffer);
 
     // Create the sparse version of the table with `comptime_int`
     var min, var max = .{ 0, 0 };
-    const top_level = visitPageLevel(options, ctx, &pages, &min, &max, void) orelse unreachable;
+    const page_size = blk: {
+        const offset = @bitSizeOf(options.Index) % options.page_size;
+        break :blk if (offset == 0) options.page_size else offset;
+    };
+    const top_level = visitPageLevel(options, ctx, &pages, &min, &max, void, page_size) orelse
+        unreachable;
 
     // Check if the entry type the user supplied is optional
     const optional = switch (@typeInfo(options.Entry)) {
@@ -95,7 +100,8 @@ fn buildTable(comptime options: Options, comptime ctx: anytype) BuildInfo(option
     // Create a version of that table that has the smallest entry type possible
     var compressed: [pages.items.len << options.page_size]Entry = undefined;
     for (&compressed, 0..) |*entry, i| {
-        entry.* = pages.items[i >> options.page_size][i % (1 << options.page_size)] orelse max + 1;
+        entry.* = pages.items[i >> options.page_size][i % (1 << options.page_size)] orelse
+            if (optional) max + 1 else 0;
     }
     const final = compressed;
     const @"null" = max + 1;
@@ -105,11 +111,15 @@ fn buildTable(comptime options: Options, comptime ctx: anytype) BuildInfo(option
         .getFn = struct {
             pub fn lut(index: options.Index) options.Entry {
                 // This is the bit index of where the first level starts
-                const first_level = @bitSizeOf(options.Index) - options.page_size;
+                const first_level = @bitSizeOf(options.Index) - page_size;
 
                 // Then for every page level in the page table, traverse it
                 var entry = final[(top_level << options.page_size) + (index >> first_level)];
-                inline for (1..@bitSizeOf(options.Index) / options.page_size) |level| {
+                inline for (1..std.math.divCeil(
+                    comptime_int,
+                    @bitSizeOf(options.Index),
+                    options.page_size,
+                ) catch unreachable) |level| {
                     const level_index: std.meta.Int(.unsigned, options.page_size) =
                         @truncate(index >> first_level - level * options.page_size);
                     entry = final[(@as(usize, @intCast(entry)) << options.page_size) + level_index];
@@ -138,6 +148,7 @@ fn visitPageLevel(
     comptime min: *comptime_int,
     comptime max: *comptime_int,
     comptime prefix: anytype,
+    comptime page_size: comptime_int,
 ) ?comptime_int {
     // Get how long of a prefix we were given
     const prefix_len = if (@TypeOf(prefix) == void) 0 else @bitSizeOf(@TypeOf(prefix));
@@ -162,22 +173,22 @@ fn visitPageLevel(
         };
     } else {
         // Create a new page entry since we are not fully specialized prefix
-        var new_page: options.Page() = undefined;
-        for (&new_page, 0..new_page.len) |*entry, i| {
+        var new_page = [1]?comptime_int{null} ** (1 << options.page_size);
+        for (new_page[0 .. 1 << page_size], 0..) |*entry, i| {
             // Extend the prefix into an int that can also fit the the next page level
             var next_prefix = @as(
-                std.meta.Int(.unsigned, prefix_len + options.page_size),
+                std.meta.Int(.unsigned, prefix_len + page_size),
                 if (prefix_len == 0) 0 else prefix,
             );
             if (prefix_len > 0) {
-                next_prefix <<= options.page_size;
+                next_prefix <<= page_size;
             }
 
             // Add what page entry we are actually pointing to
-            next_prefix += @as(std.meta.Int(.unsigned, options.page_size), @intCast(i));
+            next_prefix += @as(std.meta.Int(.unsigned, page_size), @intCast(i));
 
             // Get the entry for this page
-            entry.* = visitPageLevel(options, ctx, pages, min, max, next_prefix);
+            entry.* = visitPageLevel(options, ctx, pages, min, max, next_prefix, options.page_size);
         }
 
         // Either find that this page is already refrenced in the orignial pages array, or add it
