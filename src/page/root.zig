@@ -69,6 +69,9 @@ fn BuildInfo(comptime options: Options) type {
 /// - `ctx` is a type that has the function:
 ///     pub fn get(this: @This(), Index) Entry
 fn buildTable(comptime options: Options, comptime ctx: anytype) BuildInfo(options) {
+    // Set the branch eval quota
+    @setEvalBranchQuota(options.max_pages * 100000);
+    
     // Create the backing buffer so we can generate the first pass of the table
     var page_buffer: [options.max_pages]options.Page() = undefined;
     var pages = std.ArrayList(options.Page()).initBuffer(&page_buffer);

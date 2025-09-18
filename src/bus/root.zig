@@ -12,12 +12,12 @@ pub const Width = struct {
 
     /// Address type
     pub fn Addr(this: @This()) type {
-        return std.meta.Int(.unsigned, this.addr_width);
+        return std.meta.Int(.unsigned, this.addr);
     }
 
     /// Data type to be passed on addresses and used for signals
     pub fn Data(this: @This()) type {
-        return std.meta.Int(.unsigned, this.data_width);
+        return std.meta.Int(.unsigned, this.data);
     }
 };
 
@@ -32,7 +32,7 @@ pub fn Mapping(comptime width: Width) type {
         size: width.Addr(),
 
         /// What is the end (inclusive) of this memory region? It will mirror `size` until this end.
-        end: width.Addr(),
+        end: ?width.Addr() = null,
     };
 }
 
@@ -71,8 +71,11 @@ pub fn Bus(comptime width: Width) type {
             }, struct {
                 pub fn get(_: @This(), addr: width.Addr()) ?usize {
                     // Try to see if any of the mappings overlap with the address else return null
+                    @setEvalBranchQuota(map.len * 10000);
                     return for (map, 0..) |mapping, mapping_idx| {
-                        if (addr >= mapping.start and addr <= mapping.end) {
+                        if (addr >= mapping.start and addr <= mapping.end orelse
+                            mapping.start + mapping.size - 1)
+                        {
                             break mapping_idx;
                         }
                     } else null;
@@ -90,7 +93,7 @@ pub fn Bus(comptime width: Width) type {
             const index = this.map(addr) orelse return null;
             const rd = this.devices[index].read orelse return null;
             const mapping = this.mappings[index];
-            return rd((addr - mapping.start) & (mapping.size - 1), mask);
+            return rd(this.devices[index], (addr - mapping.start) & (mapping.size - 1), mask);
         }
 
         /// Write some data to the bus
@@ -103,7 +106,7 @@ pub fn Bus(comptime width: Width) type {
             const index = this.map(addr) orelse return null;
             const wr = this.devices[index].write orelse return null;
             const mapping = this.mappings[index];
-            wr((addr - mapping.start) & (mapping.size - 1), mask, data);
+            wr(this.devices[index], (addr - mapping.start) & (mapping.size - 1), mask, data);
         }
     };
 }
