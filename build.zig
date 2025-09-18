@@ -33,11 +33,7 @@ const Module = struct {
         const mod = try b.allocator.create(@This());
         mod.* = .{
             .module = b.createModule(.{
-                .root_source_file = b.path(b.pathJoin(&.{
-                    "src",
-                    name,
-                    b.fmt("{s}.zig", .{name}),
-                })),
+                .root_source_file = b.path(b.pathJoin(&.{ "src", name, "root.zig" })),
                 .imports = mod_imports,
                 .target = opts.target,
                 .optimize = opts.optimize,
