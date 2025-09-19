@@ -1,4 +1,5 @@
 //! M68k cpu state
+const bus_interface = @import("bus");
 
 /// Data registers
 d: [8]u32 = [1]u32{0} ** 8,
@@ -8,6 +9,9 @@ a: [8]u32 = [1]u32{0} ** 8,
 pc: u32 = 0,
 /// Status register
 sr: Status = .{},
+
+/// M68K processesor bus width
+pub const width = bus_interface.Width{ .addr = 23, .data = 16 };
 
 /// M68K processor status flags
 pub const Status = packed struct {

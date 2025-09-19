@@ -1,44 +1,54 @@
 const std = @import("std");
 
-pub const Bus = @import("Bus.zig");
+const bus_interface = @import("bus");
+
 pub const Cpu = @import("Cpu.zig");
-const Exec = @import("Exec.zig");
+const Ctx = @import("Ctx.zig");
 const isa = @import("isa.zig");
-pub const Disasm = isa.Disasm;
 const ops = @import("ops.zig");
 const targets = @import("targets.zig");
+
+const Bus = bus_interface.Bus(Cpu.width);
 
 /// Process an exception
 pub fn exception(vector: Cpu.Vector, cpu: *Cpu, bus: *Bus) usize {
     // Run exception specific code
-    var exec = Exec{
-        .cpu = cpu,
-        .bus = bus,
-    };
+    var ctx = Ctx{ .cpu = cpu, .bus = bus };
     switch (vector) {
         .illegal => {
-            exec.clk += 12;
-            exec.push(u32, exec.cpu.pc);
-            exec.push(Cpu.Status, exec.cpu.sr);
-            exec.cpu.pc = exec.read(u32, vector.addr());
+            ctx.clk += 12;
+            ctx.push(u32, ctx.cpu.pc);
+            ctx.push(Cpu.Status, ctx.cpu.sr);
+            ctx.cpu.pc = ctx.read(u32, vector.addr());
         },
         _ => {},
     }
-    return exec.clk + 2;
+    return ctx.clk + 2;
 }
 
 /// Run one instruction
 pub fn step(cpu: *Cpu, bus: *Bus) usize {
-    var exec = Exec{
-        .cpu = cpu,
-        .bus = bus,
-    };
-    const opcode = Exec.fetch(&exec, u16);
+    var ctx = Ctx{ .cpu = cpu, .bus = bus };
+    const opcode = ctx.fetch(u16);
     if (m68k_isa.handler(opcode)) |pfn| {
-        pfn(opcode, &exec);
+        pfn(opcode, &ctx);
     }
-    return exec.clk;
+    return ctx.clk;
 }
+
+/// Disassemble one instruction
+pub const Disasm = struct {
+    reader: *std.io.Reader,
+
+    pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+        const opcode = this.reader.takeInt(u16, .big) catch return error.WriteFailed;
+        if (m68k_isa.disasm(opcode)) |pfn| {
+            try pfn(writer, this.reader, opcode);
+        } else {
+            try writer.print("<invalid opcode>", .{});
+        }
+    }
+};
 
 /// M68k instruction set architecture
 const m68k_isa = isa.Isa(&.{
@@ -48,7 +58,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.RegRegTarget(3, 0, .{}),
         .dst = targets.RegRegTarget(3, 9, .{ .b = .{ 2, 2 } }),
         .op = ops.Abcd,
-        .size = Exec.Size.Enc{ .fixed = .b },
+        .size = Ctx.Size.Enc{ .fixed = .b },
     },
     isa.Instr{
         .name = "add",
@@ -60,7 +70,7 @@ const m68k_isa = isa.Isa(&.{
         }) }),
         .dst = targets.DataTarget(9),
         .op = ops.Add,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "add",
@@ -68,7 +78,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.DataTarget(9),
         .dst = targets.EaTarget(3, 0, .{}),
         .op = ops.Add,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "adda",
@@ -84,7 +94,7 @@ const m68k_isa = isa.Isa(&.{
         }),
         .dst = targets.AddrTarget(9),
         .op = ops.Adda,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
     },
     isa.Instr{
         .name = "addi",
@@ -92,7 +102,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.ImmTarget,
         .dst = targets.EaTarget(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = ops.Add,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "addq",
@@ -100,7 +110,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.QuickTarget(u3, 9),
         .dst = targets.EaTarget(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = ops.Add,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "addq",
@@ -108,7 +118,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.QuickTarget(u3, 9),
         .dst = targets.AddrTarget(0),
         .op = ops.Adda,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
         .clk = 4,
     },
     isa.Instr{
@@ -117,7 +127,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.RegRegTarget(3, 0, .{}),
         .dst = targets.RegRegTarget(3, 9, .{ .b = .{ 0, 2 }, .l = .{ 4, 2 } }),
         .op = ops.Addx,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "and",
@@ -128,7 +138,7 @@ const m68k_isa = isa.Isa(&.{
         }) }),
         .dst = targets.DataTarget(9),
         .op = ops.And,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "and",
@@ -136,7 +146,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.DataTarget(9),
         .dst = targets.EaTarget(3, 0, .{}),
         .op = ops.And,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "andi",
@@ -144,7 +154,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.ImmTarget,
         .dst = targets.SrTarget,
         .op = ops.And,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
         .clk = 12,
     },
     isa.Instr{
@@ -153,7 +163,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.ImmTarget,
         .dst = targets.EaTarget(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = ops.And,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "asl",
@@ -161,7 +171,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.ConstTarget(u3, 1),
         .dst = targets.EaTarget(3, 0, .{}),
         .op = ops.Asl,
-        .size = Exec.Size.Enc{ .fixed = .w },
+        .size = Ctx.Size.Enc{ .fixed = .w },
     },
     isa.Instr{
         .name = "asl",
@@ -169,7 +179,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.QuickTarget(u3, 9),
         .dst = targets.DataTarget(0),
         .op = ops.Asl,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "asl",
@@ -177,7 +187,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.DataTarget(9),
         .dst = targets.DataTarget(0),
         .op = ops.Asl,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "ori",
@@ -185,7 +195,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.ImmTarget,
         .dst = targets.SrTarget,
         .op = ops.Or,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
         .clk = 12,
     },
     isa.Instr{
@@ -194,7 +204,7 @@ const m68k_isa = isa.Isa(&.{
         .src = targets.ImmTarget,
         .dst = targets.EaTarget(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = ops.Or,
-        .size = Exec.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "nop",

@@ -1,20 +1,8 @@
 const std = @import("std");
 
-const Exec = @import("Exec.zig"); 
+const page = @import("page");
 
-/// Disassemble one instruction
-const Disasm = struct {
-    reader: *std.io.Reader,
-
-    pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-        const opcode = this.reader.takeInt(u16, .big) catch return error.WriteFailed;
-        if (isa.disasm(opcode)) |pfn| {
-            try pfn(writer, this.reader, opcode);
-        } else {
-            try writer.print("<invalid opcode>", .{});
-        }
-    }
-};
+const Ctx = @import("Ctx.zig");
 
 /// A M68K instruction definition
 const Instr = struct {
@@ -29,93 +17,78 @@ const Instr = struct {
     /// What operation to perform
     op: ?type = null,
     /// The size(s) of the instruction
-    size: ?Size.Enc = null,
+    size: Ctx.Size.Enc = .{ .fixed = .none },
     /// Any extra cycles to add to the instruction execution
     clk: usize = 0,
 
-    /// Runtime operand
-    fn Operand(comptime Target: type, comptime size: ?Size) type {
-        return struct {
-            operand: Target,
-            data: Data,
-
-            const Data = switch (@typeInfo(@TypeOf(Target.Data)).@"fn".params[0].type orelse
-                void) {
-                Size => Target.Data(size orelse @compileError("Expected size for operand!")),
-                ?Size => Target.Data(size),
-                else => @compileError("Expected size parameter"),
-            };
-
-            fn init(exec: *Exec, opcode: u16) @This() {
-                const InitParam = @typeInfo(@TypeOf(Target.init)).@"fn".params[1].type orelse void;
-                var operand = switch (InitParam) {
-                    Size => Target.init(exec, size orelse unreachable, opcode),
-                    ?Size => Target.init(exec, size, opcode),
-                    else => @compileError("Expected size parameter"),
-                };
-                const LoadParam = @typeInfo(@TypeOf(Target.load)).@"fn".params[2].type orelse void;
-                const data = switch (LoadParam) {
-                    Size => operand.load(exec, size orelse unreachable, opcode),
-                    ?Size => operand.load(exec, size, opcode),
-                    else => @compileError("Expected size parameter"),
-                };
-                return .{
-                    .operand = operand,
-                    .data = data,
-                };
-            }
-
-            fn store(this: *@This(), exec: *Exec, opcode: u16, data: Data) void {
-                const Param = @typeInfo(@TypeOf(Target.store)).@"fn".params[2].type orelse void;
-                switch (Param) {
-                    Size => this.operand.store(exec, size orelse unreachable, opcode, data),
-                    ?Size => this.operand.store(exec, size, opcode, data),
-                    else => @compileError("Expected size parameter"),
+    /// Get all instruction permutations for this
+    fn getSizes(comptime this: @This()) []const Spec {
+        var buffer: [std.meta.fields(Ctx.Size).len]Spec = undefined;
+        var perms = std.ArrayList(Spec).initBuffer(&buffer);
+        switch (this.enc) {
+            .fixed => |size| perms.appendAssumeCapacity(.init(this, size)),
+            .dyn => |x| for (std.meta.fieldNames(@TypeOf(x))) |field| {
+                if (@FieldType(@TypeOf(x), field) == ?comptime_int and
+                    @field(x, field) != null)
+                {
+                    perms.appendAssumeCapacity(.init(this, @field(Ctx.Size, field)));
                 }
-            }
-        };
+            },
+        }
+        const final = buffer;
+        return final[0..perms.items.len];
     }
 
     /// Instruction specialization
     const Spec = struct {
         enc: Opcode,
-        run: *const fn (u16, *Exec) void,
+        run: *const fn (*Ctx, u16) void,
         disasm: *const fn (*std.io.Writer, *std.io.Reader, u16) std.io.Writer.Error!void,
 
-        fn init(comptime instr: Instr, comptime size: ?Size) @This() {
-            const enc = if (instr.size) |enc| switch (enc) {
-                .fixed => instr.enc,
-                .dyn => |dyn| instr.enc.overwrite(dyn.at, enc.encode(size orelse
-                    @compileError("Expected size for instruction"))),
-            } else instr.enc;
+        fn init(comptime instr: Instr, comptime size: Ctx.Size) @This() {
+            const enc = instr.enc.overwrite(switch (instr.size) {
+                .fixed => 0,
+                .dyn => |dyn| dyn.at,
+            }, instr.size.encode(size orelse @compileError("Expected size for instruction")));
             return .{
                 .enc = enc,
                 .run = struct {
-                    pub fn run(opcode: u16, exec: *Exec) void {
-                        exec.clk += instr.clk;
-                        if (instr.src) |Src| {
-                            const SrcOp = Operand(Src, size);
-                            if (instr.dst) |Dst| {
-                                const DstOp = Operand(Dst, size);
-                                const src = SrcOp.init(exec, opcode);
-                                var dst = DstOp.init(exec, opcode);
-                                const result = runop(instr.op, DstOp.Data, size, exec, .{
-                                    src.data,
-                                    dst.data,
-                                });
-                                dst.store(exec, opcode, result);
-                            } else {
-                                const src = SrcOp.init(exec, opcode);
-                                _ = runop(instr.op, SrcOp.Data, size, exec, .{src.data});
-                            }
-                        } else if (instr.dst) |Dst| {
-                            const DstOp = Operand(Dst, size);
-                            var dst = DstOp.init(exec, opcode);
-                            const result = runop(instr.op, DstOp.Data, size, exec, .{dst.data});
-                            dst.store(exec, opcode, result);
-                        } else {
-                            const Data = if (size) |s| s.Int(.unsigned) else void;
-                            _ = runop(instr.op, Data, size, exec, .{});
+                    pub fn run(ctx: *Ctx, opcode: u16) void {
+                        ctx.clk += instr.clk;
+                        switch (@as(u2, @intFromBool(instr.src != null)) << 1 |
+                            @as(u2, @intFromBool(instr.dst != null))) {
+                            0b00 => {
+                                const Op = instr.op orelse return;
+                                _ = Op.op(size);
+                            },
+                            0b10 => {
+                                const Src = instr.src orelse unreachable;
+                                const Op = instr.op orelse return;
+                                _ = Op.op(size, Src.decode(ctx, size, opcode)
+                                    .load(ctx, size, opcode));
+                            },
+                            0b01 => {
+                                const Dst = instr.dst orelse unreachable;
+                                const dst = Dst.decode(ctx, size, opcode);
+                                const res = if (instr.op) |Op|
+                                    Op.op(size, dst.load(ctx, size, opcode))
+                                else
+                                    dst.load(ctx, size, opcode);
+                                dst.store(ctx, size, opcode, res);
+                            },
+                            0b11 => {
+                                const Src = instr.src orelse unreachable;
+                                const Dst = instr.dst orelse unreachable;
+                                const src_target = Src.decode(ctx, size, opcode);
+                                const src_data = src_target.load(ctx, size, opcode);
+                                const dst_target = Dst.decode(ctx, size, opcode);
+                                const dst_data = dst_target.load(ctx, size, opcode);
+                                const res = if (instr.op) |Op|
+                                    Op.op(size, src_data, dst_data)
+                                else
+                                    src_data;
+                                dst_target.store(ctx, size, opcode, res);
+                            },
                         }
                     }
                 }.run,
@@ -125,94 +98,49 @@ const Instr = struct {
                         reader: *std.io.Reader,
                         opcode: u16,
                     ) std.io.Writer.Error!void {
-                        _ = try writer.write(instr.name);
-                        if (size) |s| switch (instr.size orelse .{ .fixed = .l }) {
+                        switch (instr.size orelse .{ .fixed = .none }) {
                             .fixed => {},
-                            .dyn => try writer.print(".{s}", .{@tagName(s)}),
-                        };
-                        const instr_src: ?type = if (instr.src) |t|
-                            (if (@hasDecl(t, "Disasm")) t else null)
-                        else
-                            null;
-                        const instr_dst: ?type = if (instr.dst) |t|
-                            (if (@hasDecl(t, "Disasm")) t else null)
-                        else
-                            null;
-                        if (instr_src) |src| {
-                            if (instr_dst) |dst| {
-                                try writer.print(" {f},{f}", .{
-                                    initdisasm(size, src, reader, opcode),
-                                    initdisasm(size, dst, reader, opcode),
-                                });
-                            } else {
-                                try writer.print(" {f}", .{initdisasm(size, src, reader, opcode)});
-                            }
-                        } else if (instr_dst) |dst| {
-                            try writer.print(" {f}", .{initdisasm(size, dst, reader, opcode)});
+                            .dyn => try writer.print(".{s}", .{@tagName(size)}),
+                        }
+                        switch (comptime @as(u2, @intFromBool(@hasDecl(
+                            instr.src orelse struct {},
+                            "Disasm",
+                        ))) << 1 | @as(u2, @intFromBool(@hasDecl(
+                            instr.dst orelse struct {},
+                            "Disasm",
+                        ))) << 1) {
+                            0b00 => {},
+                            0b10 => {
+                                const Src = instr.src orelse unreachable;
+                                try writer.print(" {f}", .{Src.Disasm(size){
+                                    .reader = reader,
+                                    .opcode = opcode,
+                                }});
+                            },
+                            0b01 => {
+                                const Dst = instr.dst orelse unreachable;
+                                try writer.print(" {f}", .{Dst.Disasm(size){
+                                    .reader = reader,
+                                    .opcode = opcode,
+                                }});
+                            },
+                            0b11 => {
+                                const Src = instr.src orelse unreachable;
+                                const Dst = instr.dst orelse unreachable;
+                                try writer.print(" {f},{f}", .{ Src.Disasm(size){
+                                    .reader = reader,
+                                    .opcode = opcode,
+                                }, Dst.Disasm(size){
+                                    .reader = reader,
+                                    .opcode = opcode,
+                                } });
+                            },
                         }
                     }
                 }.disasm,
             };
         }
-
-        /// Run a operation handler
-        fn runop(
-            comptime op: ?type,
-            comptime Result: type,
-            comptime size: ?Size,
-            exec: *Exec,
-            targets: anytype,
-        ) Result {
-            const Op = op orelse return if (targets.len > 0) targets[targets.len - 1] else {};
-            const Param = @typeInfo(@TypeOf(Op.op)).@"fn".params[1].type orelse
-                @panic("Expected size as second parameter");
-            return @call(.auto, Op.op, .{
-                exec,
-                if (Param == Size) size orelse @panic("Expected size for instruction target") else size,
-            } ++ targets);
-        }
-
-        /// Initialize the disassembly formatter
-        fn initdisasm(
-            comptime size: ?Size,
-            comptime Target: type,
-            reader: *std.io.Reader,
-            opcode: u16,
-        ) Target.Disasm(if (@typeInfo(@TypeOf(Target.Disasm)).@"fn".params[0].type == ?Size)
-            size
-        else
-            size orelse @compileError("Expected concrete size")) {
-            return Target.Disasm(if (@typeInfo(@TypeOf(Target.Disasm)).@"fn".params[0].type == ?Size)
-                size
-            else
-                size orelse @compileError("Expected concrete size")){
-                .reader = reader,
-                .opcode = opcode,
-            };
-        }
     };
-
-    /// Get all instruction permutations for this
-    fn specializations(comptime this: @This()) []const Spec {
-        var buffer: [std.meta.fields(Size).len]Spec = undefined;
-        var perms = std.ArrayList(Spec).initBuffer(&buffer);
-        if (this.size) |enc| {
-            switch (enc) {
-                .fixed => |size| perms.appendAssumeCapacity(.init(this, size)),
-                .dyn => |x| for (std.meta.fieldNames(@TypeOf(x))) |field| {
-                    if (@FieldType(@TypeOf(x), field) == ?comptime_int and
-                        @field(x, field) != null)
-                    {
-                        perms.appendAssumeCapacity(.init(this, @field(Size, field)));
-                    }
-                },
-            }
-        } else {
-            perms.appendAssumeCapacity(.init(this, null));
-        }
-        const final = buffer;
-        return final[0..perms.items.len];
-    }
 };
 
 /// Matches against ranges of opcodes
@@ -237,6 +165,7 @@ const Opcode = struct {
         return .{ .set = set, .any = any };
     }
 
+    /// Checks if the opcode bits provided match the pattern of this opcode
     fn match(this: @This(), opcode: u16) bool {
         return opcode ^ this.set & ~this.any == 0;
     }
@@ -245,7 +174,7 @@ const Opcode = struct {
     fn overwrite(this: @This(), at: u4, with: anytype) @This() {
         const bits = switch (@TypeOf(with)) {
             comptime_int => @as(std.math.IntFittingRange(0, with), with),
-            u0 => return this,
+            void, u0 => return this,
             else => with,
         };
         const mask: u16 = ((1 << @bitSizeOf(@TypeOf(bits))) - 1) << at;
@@ -262,28 +191,27 @@ const Matcher = struct {
 
     /// Create the matcher
     fn init(comptime instrs: []const Instr) @This() {
-        var num_perms = 0;
-        for (instrs) |instr| {
-            num_perms += instr.specializations().len;
-        }
-
-        var perms: [num_perms]Instr.Spec = undefined;
+        // Add each instruction specialization
+        var perms: [512]Instr.Spec = undefined;
         var perms_builder = std.ArrayList(Instr.Spec).initBuffer(&perms);
         for (instrs) |instr| {
-            perms_builder.appendSliceAssumeCapacity(instr.specializations());
+            perms_builder.appendSliceAssumeCapacity(instr.getSizes());
         }
 
+        // Then sort by the specificity of each opcode
         std.sort.pdq(Instr.Spec, &perms, {}, struct {
             fn lessThanFn(_: void, lhs: Instr.Spec, rhs: Instr.Spec) bool {
                 return @popCount(lhs.enc.any) < @popCount(rhs.enc.any);
             }
         }.lessThanFn);
+
+        // Finalize variables and return
         const final = perms;
         return .{ .perms = &final };
     }
 
     /// Get the index of the permutation that was matched
-    fn match(comptime this: @This(), opcode: u16) ?comptime_int {
+    fn match(comptime this: @This(), opcode: u16) ?usize {
         return for (0..this.perms.len) |idx| {
             if (this.perms[idx].enc.match(opcode)) {
                 break idx;
@@ -294,16 +222,30 @@ const Matcher = struct {
 
 /// Instruction set architecture faciltates runtime running of instructions and disassembling
 fn Isa(comptime instrs: []const Instr) type {
+    // Set eval quota
     @setEvalBranchQuota(256 * 100000 + (1 << 16) * 1000);
+
+    // Generate the matcher
     const matcher = Matcher.init(instrs);
-    const lut = sparselut(u16, matcher, struct {
-        fn getter(m: Matcher, index: u16) ?comptime_int {
-            return m.match(index);
+
+    // Generate the look up table
+    const lut = page.table(.{
+        .Index = 16,
+        .Entry = ?usize,
+        .max_pages = 1 << 16,
+        .page_size = 4,
+    }, struct {
+        matcher: Matcher,
+
+        pub fn get(this: @This(), index: u16) ?usize {
+            return this.matcher.match(index);
         }
-    }.getter);
+    }{ .matcher = matcher });
+
+    // Create the runtime function pointers to index the look up table
     return struct {
         /// Gets the instruction handler for the opcode
-        pub fn handler(opcode: u16) ?*const fn (u16, *Exec) void {
+        pub fn runner(opcode: u16) ?*const fn (*Ctx, u16) void {
             return matcher.perms[lut(opcode) orelse return null].run;
         }
 

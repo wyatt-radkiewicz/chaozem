@@ -14,7 +14,7 @@ pub const Options = struct {
 
     /// How big each 'page' of the page table is in bits. Note that the bit size of `Index` has to
     /// be a multiple of this.
-    page_size: comptime_int = 4,
+    page_size: comptime_int,
 
     /// Returns the type for an uncompressed page
     fn Page(comptime this: @This()) type {

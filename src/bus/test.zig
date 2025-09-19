@@ -9,7 +9,7 @@ test "16 bit address and 8 bit data bus" {
     };
     var device_a = bus.Device(width){
         .read = struct {
-            pub fn read(_: *bus.Device(width), addr: u16, _: u8) ?u8 {
+            pub fn read(_: *bus.Device(width), addr: u16, _: u1) ?u8 {
                 return @truncate(addr);
             }
         }.read,
@@ -22,7 +22,7 @@ test "16 bit address and 8 bit data bus" {
     };
     var device_b = bus.Device(width){
         .read = struct {
-            pub fn read(_: *bus.Device(width), _: u16, mask: u8) ?u8 {
+            pub fn read(_: *bus.Device(width), _: u16, mask: u1) ?u8 {
                 return mask;
             }
         }.read,
@@ -39,9 +39,9 @@ test "16 bit address and 8 bit data bus" {
     try std.testing.expectEqual(0x00, network.read(0x0100, 0x00));
     try std.testing.expectEqual(0x01, network.read(0x0101, 0x00));
     try std.testing.expectEqual(null, network.read(0x0180, 0x00));
-    try std.testing.expectEqual(0xAA, network.read(0x0200, 0xAA));
-    try std.testing.expectEqual(0xAA, network.read(0x020F, 0xAA));
-    try std.testing.expectEqual(null, network.read(0x0210, 0xAA));
+    try std.testing.expectEqual(0b1, network.read(0x0200, 0b1));
+    try std.testing.expectEqual(0b0, network.read(0x020F, 0b0));
+    try std.testing.expectEqual(null, network.read(0x0210, 0b1));
 }
 
 test "bus reader" {
@@ -51,7 +51,7 @@ test "bus reader" {
     };
     var device_a = bus.Device(width){
         .read = struct {
-            pub fn read(_: *bus.Device(width), addr: u4, _: u16) ?u16 {
+            pub fn read(_: *bus.Device(width), addr: u4, _: u2) ?u16 {
                 const bytes = "hello_world_____";
                 return std.mem.readInt(u16, bytes[addr << 1 ..][0..2], .little);
             }

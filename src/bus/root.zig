@@ -19,6 +19,11 @@ pub const Width = struct {
     pub fn Data(this: @This()) type {
         return std.meta.Int(.unsigned, this.data);
     }
+    
+    /// Byte mask type
+    pub fn Mask(this: @This()) type {
+        return std.meta.Int(.unsigned, @divExact(this.data, 8));
+    }
 };
 
 /// A bus device mapping, these are passed into a bus at compile time in order to create
@@ -45,10 +50,10 @@ pub fn Mapping(comptime width: Width) type {
 pub fn Device(comptime width: Width) type {
     return struct {
         /// This function is used to get data from the device.
-        read: ?*const fn (*@This(), width.Addr(), width.Data()) ?width.Data() = null,
+        read: ?*const fn (*@This(), width.Addr(), width.Mask()) ?width.Data() = null,
 
         /// This function is used to write data to the device.
-        write: ?*const fn (*@This(), width.Addr(), width.Data(), width.Data()) void = null,
+        write: ?*const fn (*@This(), width.Addr(), width.Mask(), width.Data()) void = null,
     };
 }
 
@@ -92,7 +97,7 @@ pub fn Bus(comptime width: Width) type {
         }
 
         /// Read some data from the bus
-        pub fn read(this: This, addr: width.Addr(), mask: width.Data()) ?width.Data() {
+        pub fn read(this: This, addr: width.Addr(), mask: width.Mask()) ?width.Data() {
             const index = this.map(addr) orelse return null;
             const rd = this.devices[index].read orelse return null;
             const mapping = this.mappings[index];
@@ -100,7 +105,7 @@ pub fn Bus(comptime width: Width) type {
         }
 
         /// Write some data to the bus
-        pub fn write(this: This, addr: width.Addr(), mask: width.Data(), data: width.Data()) void {
+        pub fn write(this: This, addr: width.Addr(), mask: width.Mask(), data: width.Data()) void {
             const index = this.map(addr) orelse return null;
             const wr = this.devices[index].write orelse return null;
             const mapping = this.mappings[index];
@@ -155,7 +160,7 @@ pub fn Bus(comptime width: Width) type {
                 std.debug.assert(dest.len % size == 0);
 
                 for (0..dest.len / size) |i| {
-                    const data = this.bus.read(this.addr, std.math.maxInt(width.Data())) orelse 0;
+                    const data = this.bus.read(this.addr, std.math.maxInt(width.Mask())) orelse 0;
                     std.mem.writeInt(width.Data(), dest[i * size ..][0..size], data, this.endian);
                     this.addr +%= this.step;
                 }
