@@ -39,19 +39,6 @@
         },
         .{
             .env = .{
-                .code = .{0xD0C9},
-                .addr = .{ 0x1000, 0x2000 },
-                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
-            },
-            .expect = .{
-                .disasm = "adda.w a1,a0",
-                .clk = 8,
-                .addr = .{ 0x3000, 0x2000 },
-                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
-            },
-        },
-        .{
-            .env = .{
                 .code = .{0xD101},
                 .data = .{ 0x01, 0x02 },
                 .flags = .{ .x = true },
@@ -87,6 +74,186 @@
                 .clk = 4,
                 .data = .{ 0x1, 0x0 },
                 .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xC101},
+                .data = .{ 0x18, 0x21 },
+            },
+            .expect = .{
+                .disasm = "abcd d1,d0",
+                .clk = 6,
+                .data = .{ 0x39, 0x21 },
+                .flags = .{ .c = false, .v = null, .z = false, .n = null, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xC101},
+                .data = .{ 0x98, 0x21 },
+                .flags = .{ .x = true },
+            },
+            .expect = .{
+                .disasm = "abcd d1,d0",
+                .clk = 6,
+                .data = .{ 0x20, 0x21 },
+                .flags = .{ .c = true, .v = null, .z = false, .n = null, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xC109},
+                .ram = .{ 0x21, 0x18 },
+                .addr = .{ 0x1004, 0x1002 },
+            },
+            .expect = .{
+                .disasm = "abcd -(a1),-(a0)",
+                .clk = 18,
+                .ram = .{ 0x21, 0x39 },
+                .addr = .{ 0x1003, 0x1001 },
+                .flags = .{ .c = false, .v = null, .z = false, .n = null, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0600, 0x0010 },
+                .data = .{0x20},
+            },
+            .expect = .{
+                .disasm = "addi.b #$10,d0",
+                .clk = 8,
+                .data = .{0x30},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0640, 0x0001 },
+                .data = .{0x7FFF},
+            },
+            .expect = .{
+                .disasm = "addi.w #$0001,d0",
+                .clk = 8,
+                .data = .{0x8000},
+                .flags = .{ .c = false, .v = true, .z = false, .n = true, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0680, 0x0000, 0x0001 },
+                .data = .{0xFFFFFFFF},
+            },
+            .expect = .{
+                .disasm = "addi.l #$00000001,d0",
+                .clk = 16,
+                .data = .{0x0},
+                .flags = .{ .c = true, .v = false, .z = true, .n = false, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0650, 0x1234 },
+                .ram = .{0x4321},
+                .addr = .{0x1000},
+            },
+            .expect = .{
+                .disasm = "addi.w #$1234,(a0)",
+                .clk = 16,
+                .ram = .{0x5555},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x5200},
+                .data = .{0x10},
+            },
+            .expect = .{
+                .disasm = "addq.b #1,d0",
+                .clk = 4,
+                .data = .{0x11},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x5C40},
+                .data = .{0x10},
+            },
+            .expect = .{
+                .disasm = "addq.w #6,d0",
+                .clk = 4,
+                .data = .{0x16},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x5690},
+                .ram = .{ 0x1000, 0x2000, 0x3000, 0x4000 },
+                .addr = .{0x1000},
+            },
+            .expect = .{
+                .disasm = "addq.l #3,(a0)",
+                .clk = 20,
+                .ram = .{ 0x1000, 0x2003, 0x3000, 0x4000 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x5248},
+                .addr = .{0x10},
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+            .expect = .{
+                .disasm = "addq.w #1,a0",
+                .clk = 8,
+                .addr = .{0x11},
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD0C0},
+                .data = .{0x1000},
+                .addr = .{0x2000},
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+            .expect = .{
+                .disasm = "adda.w d0,a0",
+                .clk = 8,
+                .addr = .{0x3000},
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD3C0},
+                .data = .{0x1000},
+                .addr = .{ 0x0000, 0x2000 },
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+            .expect = .{
+                .disasm = "adda.l d0,a1",
+                .clk = 8,
+                .data = .{0x1000},
+                .addr = .{ 0x0000, 0x3000 },
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD0C9},
+                .addr = .{ 0x1000, 0x2000 },
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+            .expect = .{
+                .disasm = "adda.w a1,a0",
+                .clk = 8,
+                .addr = .{ 0x3000, 0x2000 },
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
             },
         },
     },
