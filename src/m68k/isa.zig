@@ -5,7 +5,7 @@ const page = @import("page");
 const Ctx = @import("Ctx.zig");
 
 /// A M68K instruction definition
-const Instr = struct {
+pub const Instr = struct {
     /// Name of the instruction
     name: []const u8,
     /// Opcode's encoding
@@ -25,7 +25,7 @@ const Instr = struct {
     fn getSizes(comptime this: @This()) []const Spec {
         var buffer: [std.meta.fields(Ctx.Size).len]Spec = undefined;
         var perms = std.ArrayList(Spec).initBuffer(&buffer);
-        switch (this.enc) {
+        switch (this.size) {
             .fixed => |size| perms.appendAssumeCapacity(.init(this, size)),
             .dyn => |x| for (std.meta.fieldNames(@TypeOf(x))) |field| {
                 if (@FieldType(@TypeOf(x), field) == ?comptime_int and
@@ -49,7 +49,7 @@ const Instr = struct {
             const enc = instr.enc.overwrite(switch (instr.size) {
                 .fixed => 0,
                 .dyn => |dyn| dyn.at,
-            }, instr.size.encode(size orelse @compileError("Expected size for instruction")));
+            }, instr.size.encode(size));
             return .{
                 .enc = enc,
                 .run = struct {
@@ -59,19 +59,19 @@ const Instr = struct {
                             @as(u2, @intFromBool(instr.dst != null))) {
                             0b00 => {
                                 const Op = instr.op orelse return;
-                                _ = Op.op(size);
+                                _ = Op.op(ctx, size);
                             },
                             0b10 => {
                                 const Src = instr.src orelse unreachable;
                                 const Op = instr.op orelse return;
-                                _ = Op.op(size, Src.decode(ctx, size, opcode)
+                                _ = Op.op(ctx, size, Src.decode(ctx, size, opcode)
                                     .load(ctx, size, opcode));
                             },
                             0b01 => {
                                 const Dst = instr.dst orelse unreachable;
                                 const dst = Dst.decode(ctx, size, opcode);
                                 const res = if (instr.op) |Op|
-                                    Op.op(size, dst.load(ctx, size, opcode))
+                                    Op.op(ctx, size, dst.load(ctx, size, opcode))
                                 else
                                     dst.load(ctx, size, opcode);
                                 dst.store(ctx, size, opcode, res);
@@ -84,7 +84,7 @@ const Instr = struct {
                                 const dst_target = Dst.decode(ctx, size, opcode);
                                 const dst_data = dst_target.load(ctx, size, opcode);
                                 const res = if (instr.op) |Op|
-                                    Op.op(size, src_data, dst_data)
+                                    Op.op(ctx, size, src_data, dst_data)
                                 else
                                     src_data;
                                 dst_target.store(ctx, size, opcode, res);
@@ -98,7 +98,7 @@ const Instr = struct {
                         reader: *std.io.Reader,
                         opcode: u16,
                     ) std.io.Writer.Error!void {
-                        switch (instr.size orelse .{ .fixed = .none }) {
+                        switch (instr.size) {
                             .fixed => {},
                             .dyn => try writer.print(".{s}", .{@tagName(size)}),
                         }
@@ -108,7 +108,7 @@ const Instr = struct {
                         ))) << 1 | @as(u2, @intFromBool(@hasDecl(
                             instr.dst orelse struct {},
                             "Disasm",
-                        ))) << 1) {
+                        )))) {
                             0b00 => {},
                             0b10 => {
                                 const Src = instr.src orelse unreachable;
@@ -149,7 +149,7 @@ const Opcode = struct {
     any: u16,
 
     /// Match '0','1', or 'x'
-    fn init(enc: *const [16]u8) @This() {
+    pub fn init(enc: *const [16]u8) @This() {
         var set: u16 = 0;
         var any: u16 = 0;
         for (enc) |char| {
@@ -174,7 +174,7 @@ const Opcode = struct {
     fn overwrite(this: @This(), at: u4, with: anytype) @This() {
         const bits = switch (@TypeOf(with)) {
             comptime_int => @as(std.math.IntFittingRange(0, with), with),
-            void, u0 => return this,
+            void => return this,
             else => with,
         };
         const mask: u16 = ((1 << @bitSizeOf(@TypeOf(bits))) - 1) << at;
@@ -199,7 +199,7 @@ const Matcher = struct {
         }
 
         // Then sort by the specificity of each opcode
-        std.sort.pdq(Instr.Spec, &perms, {}, struct {
+        std.sort.pdq(Instr.Spec, perms_builder.items, {}, struct {
             fn lessThanFn(_: void, lhs: Instr.Spec, rhs: Instr.Spec) bool {
                 return @popCount(lhs.enc.any) < @popCount(rhs.enc.any);
             }
@@ -207,7 +207,7 @@ const Matcher = struct {
 
         // Finalize variables and return
         const final = perms;
-        return .{ .perms = &final };
+        return .{ .perms = final[0..perms_builder.items.len] };
     }
 
     /// Get the index of the permutation that was matched
@@ -221,7 +221,7 @@ const Matcher = struct {
 };
 
 /// Instruction set architecture faciltates runtime running of instructions and disassembling
-fn Isa(comptime instrs: []const Instr) type {
+pub fn Isa(comptime instrs: []const Instr) type {
     // Set eval quota
     @setEvalBranchQuota(256 * 100000 + (1 << 16) * 1000);
 
@@ -230,7 +230,7 @@ fn Isa(comptime instrs: []const Instr) type {
 
     // Generate the look up table
     const lut = page.table(.{
-        .Index = 16,
+        .Index = u16,
         .Entry = ?usize,
         .max_pages = 1 << 16,
         .page_size = 4,

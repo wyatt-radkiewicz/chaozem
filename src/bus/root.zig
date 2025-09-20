@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const page_table = @import("page");
+const page = @import("page");
 
 /// Used to define the width of the types on the bus
 pub const Width = struct {
@@ -19,7 +19,7 @@ pub const Width = struct {
     pub fn Data(this: @This()) type {
         return std.meta.Int(.unsigned, this.data);
     }
-    
+
     /// Byte mask type
     pub fn Mask(this: @This()) type {
         return std.meta.Int(.unsigned, @divExact(this.data, 8));
@@ -62,6 +62,7 @@ pub fn Bus(comptime width: Width) type {
     return struct {
         devices: []const *Device(width),
         mappings: []const Mapping(width),
+        shift: std.math.Log2Int(width.Addr()),
         map: *const fn (width.Addr()) ?usize,
 
         const This = @This();
@@ -70,16 +71,48 @@ pub fn Bus(comptime width: Width) type {
         /// specified at compile time to create a fast look up table. Device interfaces are provided
         /// at runtime and correspond with the mappings provided.
         pub fn init(comptime map: []const Mapping(width), devices: []const *Device(width)) This {
+            // Since these are memory mapped addresses, chances are that they maps don't fall
+            // exactly on single address boundaries. We can greatly reduce the size of the look up
+            // table by finding a greatest common denominator between the addresses in log 2.
+            const shift = comptime gcd: {
+                var shift = 0;
+                while (shift < width.addr and for (map) |mapping| {
+                    const mask = @as(width.Addr(), 2 << shift) - 1;
+                    const end = mapping.end orelse mapping.start + mapping.size - 1;
+                    if (mapping.start & mask != 0 or end & mask != mask) {
+                        break false;
+                    }
+                } else true) : (shift += 1) {}
+                break :gcd shift;
+            };
+
+            // If by shifting this address we get a shift count equal to the address width, then we
+            // should just return a constant look up
+            if (shift == width.addr) {
+                return .{
+                    .devices = devices,
+                    .mappings = map,
+                    .shift = 0,
+                    .map = struct {
+                        fn inner(_: width.Addr()) ?usize {
+                            return 0;
+                        }
+                    }.inner,
+                };
+            }
+
             // Get the mapping page table function
-            const mapFn = page_table.table(.{
-                .Index = width.Addr(),
+            const Shifted = std.meta.Int(.unsigned, width.addr - shift);
+            const mapFn = page.table(.{
+                .Index = Shifted,
                 .Entry = ?usize,
                 .max_pages = 1024,
                 .page_size = 8,
             }, struct {
-                pub fn get(_: @This(), addr: width.Addr()) ?usize {
-                    // Try to see if any of the mappings overlap with the address else return null
+                pub fn get(_: @This(), shifted: Shifted) ?usize {
+                    // Try to see if any of the mappings overlap with the address else give null
                     @setEvalBranchQuota(map.len * 10000);
+                    const addr = @as(width.Addr(), shifted) << shift;
                     return for (map, 0..) |mapping, mapping_idx| {
                         if (addr >= mapping.start and addr <= mapping.end orelse
                             mapping.start + mapping.size - 1)
@@ -89,10 +122,17 @@ pub fn Bus(comptime width: Width) type {
                     } else null;
                 }
             }{});
+
+            // If we did no shift, then just use the mapFn provided, else use a wrapper function
             return .{
                 .devices = devices,
                 .mappings = map,
-                .map = mapFn,
+                .shift = shift,
+                .map = if (shift == 0) mapFn else struct {
+                    fn inner(addr: width.Addr()) ?usize {
+                        return mapFn(@truncate(addr >> shift));
+                    }
+                }.inner,
             };
         }
 
@@ -106,8 +146,8 @@ pub fn Bus(comptime width: Width) type {
 
         /// Write some data to the bus
         pub fn write(this: This, addr: width.Addr(), mask: width.Mask(), data: width.Data()) void {
-            const index = this.map(addr) orelse return null;
-            const wr = this.devices[index].write orelse return null;
+            const index = this.map(addr) orelse return;
+            const wr = this.devices[index].write orelse return;
             const mapping = this.mappings[index];
             wr(this.devices[index], (addr - mapping.start) & (mapping.size - 1), mask, data);
         }

@@ -14,7 +14,7 @@ bus: *const Bus(Cpu.width),
 clk: usize = 0,
 
 /// M68K operation sizes
-const Size = enum {
+pub const Size = enum {
     /// No size specified
     none,
     /// Byte (8 bits)
@@ -25,12 +25,12 @@ const Size = enum {
     l,
 
     /// Get the integer type for this operation size
-    fn Int(comptime this: @This(), comptime signedness: std.builtin.Signedness) type {
+    pub fn Int(comptime this: @This(), comptime signedness: std.builtin.Signedness) type {
         return std.meta.Int(signedness, this.bits());
     }
 
     /// Get the number of bits for this size
-    fn bits(comptime this: @This()) comptime_int {
+    pub fn bits(comptime this: @This()) comptime_int {
         return switch (this) {
             .none => 0,
             .b => 8,
@@ -40,7 +40,7 @@ const Size = enum {
     }
 
     /// M68K size encodings
-    const Enc = union(enum) {
+    pub const Enc = union(enum) {
         /// Fixed size at compile time
         fixed: Size,
         /// Size determined from bits at a position in the opcode
@@ -52,12 +52,12 @@ const Size = enum {
         },
 
         /// Gets the integer type used to represent the size
-        fn Type(comptime this: @This()) type {
-            return std.math.IntFittingRange(0, this.biggestEncoding() orelse 0);
+        pub fn Type(comptime this: @This()) type {
+            return std.math.IntFittingRange(0, this.biggestEncoding() orelse return void);
         }
 
         /// Decodes a size, and returns null if there was no encoding for the bits given
-        fn decode(comptime this: @This(), opcode: u16) ?Size {
+        pub fn decode(comptime this: @This(), opcode: u16) ?Size {
             return switch (this) {
                 .fixed => |size| size,
                 .dyn => |enc| blk: {
@@ -76,7 +76,7 @@ const Size = enum {
         }
 
         /// Encodes a size and returns the set bits
-        fn encode(comptime this: @This(), size: Size) this.Type() {
+        pub fn encode(comptime this: @This(), size: Size) this.Type() {
             return switch (this) {
                 .fixed => {},
                 .dyn => |enc| switch (size) {
@@ -86,7 +86,7 @@ const Size = enum {
         }
 
         /// Gets the biggest encoding value
-        fn biggestEncoding(comptime this: @This()) ?comptime_int {
+        pub fn biggestEncoding(comptime this: @This()) ?comptime_int {
             return switch (this) {
                 .fixed => null,
                 .dyn => |enc| @max(enc.b orelse 0, enc.w orelse 0, enc.l orelse 0),
@@ -96,7 +96,7 @@ const Size = enum {
 };
 
 /// Calculate address mode destinations
-const Mode = enum {
+pub const Mode = enum {
     data_reg,
     addr_reg,
     indirect,
@@ -111,7 +111,7 @@ const Mode = enum {
     immediate,
 
     /// Get from 'm' and 'n' bits
-    fn decode(m: u3, n: u3) @This() {
+    pub fn decode(m: u3, n: u3) @This() {
         return switch (m) {
             0b000 => .data_reg,
             0b001 => .addr_reg,
@@ -132,7 +132,7 @@ const Mode = enum {
     }
 
     /// Calculate an address, reg can be left as undefined if its a mode that doesn't require it
-    fn calc(this: @This(), ctx: *Ctx, comptime size: Size, reg: u3) u32 {
+    pub fn calc(this: @This(), ctx: *Ctx, comptime size: Size, reg: u3) u32 {
         return switch (this) {
             .data_reg, .addr_reg => reg,
             .indirect => ctx.cpu.a[reg],
@@ -179,7 +179,7 @@ const Mode = enum {
     };
 
     /// Disassemble an addressing mode
-    fn Disasm(comptime size: Size) type {
+    pub fn Disasm(comptime size: Size) type {
         return struct {
             reader: *std.io.Reader,
             mode: Mode,
@@ -224,6 +224,7 @@ const Mode = enum {
                     .pc_disp => try writer.print("({}, pc)", .{this.reader.takeInt(i16, .big) catch
                         return error.WriteFailed}),
                     .immediate => switch (size) {
+                        .none => unreachable,
                         .b => try writer.print("#${x:0>2}", .{@as(u8, @truncate(
                             this.reader.takeInt(u16, .big) catch return error.WriteFailed,
                         ))}),
@@ -239,7 +240,7 @@ const Mode = enum {
 };
 
 /// Fetch a type from the program counter of the cpu
-inline fn fetch(this: *Ctx, comptime Data: type) Data {
+pub inline fn fetch(this: *Ctx, comptime Data: type) Data {
     const fetch_width = @max(16, @bitSizeOf(Data));
     const data = this.read(std.meta.Int(.unsigned, fetch_width), this.cpu.pc);
     this.cpu.pc += fetch_width / 8;
@@ -247,22 +248,22 @@ inline fn fetch(this: *Ctx, comptime Data: type) Data {
 }
 
 /// Read data type X from the bus
-inline fn read(this: *Ctx, comptime Data: type, addr: u32) Data {
+pub inline fn read(this: *Ctx, comptime Data: type, addr: u32) Data {
     switch (@bitSizeOf(Data)) {
         8 => {
             this.clk += 4;
-            const byte: u1 = @truncate(addr & 1);
+            const byte: u1 = @truncate(~addr);
             const word = this.bus.read(@truncate(addr >> 1), @as(u2, 1) << byte) orelse 0;
             return @bitCast(@as(u8, @truncate(word >> @as(u4, byte) * 8)));
         },
         16 => {
             this.clk += 4;
-            return @bitCast(this.bus.read(@truncate(addr >> 1), 0xFFFF) orelse 0);
+            return @bitCast(this.bus.read(@truncate(addr >> 1), 0b11) orelse 0);
         },
         32 => {
             this.clk += 8;
-            return @bitCast(@as(u32, this.bus.read(@truncate(addr >> 1), 0xFFFF) orelse 0) << 16 |
-                @as(u32, this.bus.read(@truncate((addr >> 1) + 1), 0xFFFF) orelse 0));
+            return @bitCast(@as(u32, this.bus.read(@truncate(addr >> 1), 0b11) orelse 0) << 16 |
+                @as(u32, this.bus.read(@truncate((addr >> 1) + 1), 0b11) orelse 0));
         },
         else => @compileError(std.fmt.comptimePrint(
             "Tried to read data of width {}!",
@@ -272,23 +273,23 @@ inline fn read(this: *Ctx, comptime Data: type, addr: u32) Data {
 }
 
 /// Write data type X to the bus
-inline fn write(this: *Ctx, comptime Data: type, addr: u32, data: Data) void {
+pub inline fn write(this: *Ctx, comptime Data: type, addr: u32, data: Data) void {
     switch (@bitSizeOf(Data)) {
         8 => {
             this.clk += 4;
-            const byte: u1 = @truncate(addr);
+            const byte: u1 = @truncate(~addr);
             const word = @as(u16, @as(u8, @bitCast(data)));
-            this.bus.write(@truncate(addr >> 1), word << @as(u4, byte) * 8, 1 << byte);
+            this.bus.write(@truncate(addr >> 1), @as(u2, 1) << byte, word << @as(u4, byte) * 8);
         },
         16 => {
             this.clk += 4;
-            this.bus.write(@truncate(addr >> 1), @bitCast(data), 0xFFFF);
+            this.bus.write(@truncate(addr >> 1), 0b11, @bitCast(data));
         },
         32 => {
             this.clk += 8;
             const long = @as(u32, @bitCast(data));
-            this.bus.write(@truncate(addr >> 1), @truncate(long >> 16), 0xFFFF);
-            this.bus.write(@truncate((addr >> 1) + 1), @truncate(long), 0xFFFF);
+            this.bus.write(@truncate(addr >> 1), 0b11, @truncate(long >> 16));
+            this.bus.write(@truncate((addr >> 1) + 1), 0b11, @truncate(long));
         },
         else => @compileError(std.fmt.comptimePrint(
             "Tried to write data of width {}!",
@@ -298,14 +299,14 @@ inline fn write(this: *Ctx, comptime Data: type, addr: u32, data: Data) void {
 }
 
 /// Push data onto the stack
-inline fn push(this: *Ctx, comptime Data: type, data: Data) void {
+pub inline fn push(this: *Ctx, comptime Data: type, data: Data) void {
     const Push = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Data)));
     this.cpu.a[7] -%= @sizeOf(Push);
     this.write(Push, this.cpu.a[7], @as(std.meta.Int(.unsigned, @bitSizeOf(Data)), data));
 }
 
 /// Pop data off the stack
-inline fn pop(this: *Ctx, comptime Data: type) Data {
+pub inline fn pop(this: *Ctx, comptime Data: type) Data {
     const Push = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Data)));
     const data = this.read(Push, this.cpu.a[7]);
     this.cpu.a[7] +%= @sizeOf(Push);
@@ -314,13 +315,13 @@ inline fn pop(this: *Ctx, comptime Data: type) Data {
 
 /// Converts a byte to a binary coded decimal byte
 /// It will return a struct encoding the wrapped bcd byte and if an overflow occurred
-inline fn tobcd(byte: u8) struct { u8, bool } {
+pub inline fn tobcd(byte: u8) struct { u8, bool } {
     const carry = byte > 99;
     const wrapped = byte % 100;
     return .{ ((wrapped / 10) << 4) + (wrapped % 10), carry };
 }
 
 /// Converts bcd to a normal byte
-inline fn frombcd(bcd: u8) u8 {
+pub inline fn frombcd(bcd: u8) u8 {
     return ((bcd >> 4) * 10) + (bcd & 0xf);
 }

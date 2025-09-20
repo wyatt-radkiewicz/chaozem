@@ -5,8 +5,8 @@ const int = @import("int");
 const Ctx = @import("Ctx.zig");
 
 /// Binary decimal add operation
-const Abcd = struct {
-    fn op(ctx: *Ctx, comptime _: Ctx.Size, src: u8, dst: u8) u8 {
+pub const Abcd = struct {
+    pub fn op(ctx: *Ctx, comptime _: Ctx.Size, src: u8, dst: u8) u8 {
         const result = Ctx.tobcd(Ctx.frombcd(src) + Ctx.frombcd(dst) +
             @intFromBool(ctx.cpu.sr.x));
         ctx.cpu.sr.x = result[1];
@@ -17,8 +17,8 @@ const Abcd = struct {
 };
 
 /// Normal addition operation
-const Add = struct {
-    fn op(
+pub const Add = struct {
+    pub fn op(
         ctx: *Ctx,
         comptime size: Ctx.Size,
         src: size.Int(.unsigned),
@@ -40,15 +40,15 @@ const Add = struct {
 };
 
 /// Address addition operation
-const Adda = struct {
-    fn op(_: *Ctx, comptime size: Ctx.Size, src: size.Int(.unsigned), dst: u32) u32 {
+pub const Adda = struct {
+    pub fn op(_: *Ctx, comptime size: Ctx.Size, src: size.Int(.unsigned), dst: u32) u32 {
         return int.extend(u32, src) +% dst;
     }
 };
 
 /// Extended addition operation
-const Addx = struct {
-    fn op(
+pub const Addx = struct {
+    pub fn op(
         ctx: *Ctx,
         comptime size: Ctx.Size,
         src: size.Int(.unsigned),
@@ -73,8 +73,8 @@ const Addx = struct {
 };
 
 /// Bitwise and
-const And = struct {
-    fn op(
+pub const And = struct {
+    pub fn op(
         ctx: *Ctx,
         comptime size: Ctx.Size,
         src: size.Int(.unsigned),
@@ -88,8 +88,8 @@ const And = struct {
 };
 
 /// Arithmatic shift left
-const Asl = struct {
-    fn op(
+pub const Asl = struct {
+    pub fn op(
         ctx: *Ctx,
         comptime size: Ctx.Size,
         shift_amt: size.Int(.unsigned),
@@ -111,8 +111,8 @@ const Asl = struct {
 };
 
 /// Normal or operation
-const Or = struct {
-    fn op(
+pub const Or = struct {
+    pub fn op(
         ctx: *Ctx,
         comptime size: Ctx.Size,
         src: size.Int(.unsigned),

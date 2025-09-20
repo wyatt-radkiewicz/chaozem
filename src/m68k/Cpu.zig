@@ -44,7 +44,7 @@ pub const Vector = enum(u5) {
     _,
 
     /// Get the address of the vector in the memory map
-    fn addr(this: @This()) u32 {
+    pub fn addr(this: @This()) u32 {
         return @as(u32, @intFromEnum(this)) * @sizeOf(u32);
     }
 };

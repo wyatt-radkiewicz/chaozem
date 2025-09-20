@@ -70,7 +70,7 @@ fn BuildInfo(comptime options: Options) type {
 ///     pub fn get(this: @This(), Index) Entry
 fn buildTable(comptime options: Options, comptime ctx: anytype) BuildInfo(options) {
     // Set the branch eval quota and check parameters
-    @setEvalBranchQuota(options.max_pages * 100000);
+    @setEvalBranchQuota(options.max_pages * 10000);
 
     // Create the backing buffer so we can generate the first pass of the table
     var page_buffer: [options.max_pages]options.Page() = undefined;
