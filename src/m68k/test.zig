@@ -23,6 +23,7 @@ const Test = struct {
     /// Run the test
     fn run(this: @This(), group: []const u8, vectors: Vectors, allocator: std.mem.Allocator) !void {
         // Setup the environment to test
+        const err_ctx = .{ group, this.expect.disasm };
         var rom = Rom{};
         var ram = Ram{};
         var cpu = Cpu{};
@@ -31,51 +32,40 @@ const Test = struct {
 
         // Create a bus interface to access the environment
         var bus = Bus.init(&.{
-            //Mapping{
-            //    .start = 0,
-            //    .size = rom.words.len,
-            //},
-            //Mapping{
-            //    .start = rom.words.len,
-            //    .size = ram.words.len,
-            //    .end = std.math.maxInt(Cpu.width.Addr()),
-            //},
-        }, &.{}); //&.{ &rom.device, &ram.device });
+            Mapping{
+                .start = 0,
+                .size = rom.words.len,
+            },
+            Mapping{
+                .start = rom.words.len,
+                .size = ram.words.len,
+                .end = std.math.maxInt(Cpu.width.Addr()),
+            },
+        }, &.{ &rom.device, &ram.device });
 
         // Create a reader to generate a disassembly from the environment
         var reader_buffer = [1]u8{0} ** 8;
         var reader = bus.reader(@truncate(vectors.reset_pc >> 1), &reader_buffer, .big, 1);
-        var writer_buffer = std.ArrayList(u8){};
-        defer writer_buffer.deinit(allocator);
 
         // Run though each instruction and test its disassembly
         var cycles: usize = 0;
-        var lines = if (this.expect.disasm) |x| std.mem.splitScalar(u8, x, '\n') else null;
-        while (cpu.pc < this.env.code.len * 2) {
-            // Disassemble the instruction
-            if (lines) |*line_iter| {
-                // Print the dissassembler output
-                var writer = writer_buffer.writer(allocator);
-                try writer.print("{f}", .{m68k.Disasm{ .reader = &reader.interface }});
-                const actual = try writer_buffer.toOwnedSlice(allocator);
-                defer allocator.free(actual);
+        var lines = std.mem.splitScalar(u8, this.expect.disasm, '\n');
+        while (cpu.pc < vectors.reset_pc + this.env.code.len * 2) {
+            // Print the dissassembler output
+            var disasm = std.io.Writer.Allocating.init(allocator);
+            try disasm.writer.print("{f}", .{m68k.Disasm{ .reader = &reader.interface }});
+            const actual = try disasm.toOwnedSlice();
+            defer allocator.free(actual);
 
-                // Get the next line from the diassembly and check that they are the same
-                const expected = line_iter.next() orelse {
-                    std.debug.print("expected another instruction in \"{s}\" at \"{s}\"", .{
-                        group,
-                        this.expect.disasm orelse "<no disasm>",
-                    });
-                    return error.TestFailed;
-                };
-                std.testing.expectEqualSlices(u8, expected, actual) catch {
-                    std.debug.print("disasm failed in \"{s}\" at \"{s}\"", .{
-                        group,
-                        this.expect.disasm orelse "<no disasm>",
-                    });
-                    return error.TestFailed;
-                };
-            }
+            // Get the next line from the diassembly and check that they are the same
+            const expected = lines.next() orelse {
+                std.debug.print("expected another instruction in \"{s}\" at \"{s}\"\n", err_ctx);
+                return error.TestFailed;
+            };
+            std.testing.expectEqualSlices(u8, expected, actual) catch {
+                std.debug.print("disasm failed in \"{s}\" at \"{s}\"\n", err_ctx);
+                return error.TestFailed;
+            };
 
             // Run one instruction
             cycles += m68k.step(&cpu, &bus);
@@ -83,10 +73,7 @@ const Test = struct {
 
         // Check the final environment
         this.expect.check(&ram, &cpu, cycles) catch {
-            std.debug.print("test failed in \"{s}\" at \"{s}\"", .{
-                group,
-                this.expect.disasm orelse "<no disasm>",
-            });
+            std.debug.print("test failed in \"{s}\" at \"{s}\"\n", err_ctx);
             return error.TestFailed;
         };
     }
@@ -146,17 +133,19 @@ const Env = struct {
 
     /// Initialize the state of the runner
     fn setup(this: @This(), vectors: Vectors, rom: *Rom, ram: *Ram, cpu: *Cpu) void {
-        @memcpy(rom.words[vectors.reset_pc .. vectors.reset_pc + this.code.len], this.code);
+        const code_start = vectors.reset_pc >> 1;
+        @memcpy(rom.words[code_start .. code_start + this.code.len], this.code);
         @memcpy(ram.words[0..this.ram.len], this.ram);
         @memcpy(cpu.d[0..this.data.len], this.data);
         @memcpy(cpu.a[0..this.addr.len], this.addr);
+        cpu.pc = vectors.reset_pc;
         this.flags.setup(cpu);
     }
 };
 
 /// Expect state
 const Expect = struct {
-    disasm: ?[]const u8 = null,
+    disasm: []const u8,
     clk: ?usize = null,
     ram: ?[]const u16 = null,
     data: ?[]const u32 = null,
@@ -187,9 +176,9 @@ const Rom = struct {
     device: Device = .{ .read = read },
 
     /// Get data from ROM
-    pub fn read(dev: *Device, addr: Cpu.width.Addr(), mask: Cpu.width.Mask()) ?Cpu.width.Data() {
+    pub fn read(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask()) ?Cpu.width.Data() {
         const this: *@This() = @fieldParentPtr("device", dev);
-        return this.words[addr] & mask;
+        return this.words[addr];
     }
 };
 
@@ -199,15 +188,16 @@ const Ram = struct {
     device: Device = .{ .read = read, .write = write },
 
     /// Get data from RAM
-    pub fn read(dev: *Device, addr: Cpu.width.Addr(), mask: Cpu.width.Mask()) ?u16 {
+    pub fn read(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask()) ?u16 {
         const this: *@This() = @fieldParentPtr("device", dev);
-        return this.words[addr] & mask;
+        return this.words[addr];
     }
 
     /// Set data in RAM
-    pub fn write(dev: *Device, addr: Cpu.width.Addr(), mask: Cpu.width.Mask(), data: u16) void {
+    pub fn write(dev: *Device, addr: Cpu.width.Addr(), bytes: Cpu.width.Mask(), data: u16) void {
         const this: *@This() = @fieldParentPtr("device", dev);
-        this.words[addr] = this.words[addr] & ~mask | data;
+        const mask = [4]u16{ 0x0000, 0x00FF, 0xFF00, 0xFFFF };
+        this.words[addr] = this.words[addr] & ~mask[bytes] | data;
     }
 };
 
@@ -217,21 +207,25 @@ test "m68k tests" {
     defer dir.close();
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
+        // Make sure we are testing a test file
         if (!std.mem.eql(u8, ".zon", std.fs.path.extension(entry.name))) {
             continue;
         }
 
+        // Read in the file
         const max_len = 4 * 1024 * 1024;
         const allocator = std.testing.allocator;
         const bytes = try dir.readFileAllocOptions(allocator, entry.name, max_len, null, .@"1", 0);
         defer allocator.free(bytes);
 
+        // Parse the file
         const tests = std.zon.parse.fromSlice(Tests, allocator, bytes, null, .{}) catch {
             std.debug.print("Failed to parse \"{s}\" m68k test file\n", .{entry.name});
             return error.ParsingFailed;
         };
         defer std.zon.parse.free(allocator, tests);
 
+        // Run each test in the file
         for (tests.tests) |@"test"| {
             try @"test".run(entry.name, tests.vectors, allocator);
         }

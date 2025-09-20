@@ -98,6 +98,7 @@ pub const Instr = struct {
                         reader: *std.io.Reader,
                         opcode: u16,
                     ) std.io.Writer.Error!void {
+                        try writer.print("{s}", .{instr.name});
                         switch (instr.size) {
                             .fixed => {},
                             .dyn => try writer.print(".{s}", .{@tagName(size)}),

@@ -6,7 +6,7 @@ const arg = @import("arg.zig");
 pub const Cpu = @import("Cpu.zig");
 const Ctx = @import("Ctx.zig");
 const isa = @import("isa.zig");
-const ops = @import("ops.zig");
+const op = @import("op.zig");
 
 const Bus = bus_interface.Bus(Cpu.width);
 
@@ -57,7 +57,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1100xxx10000xxxx"),
         .src = arg.RegReg(3, 0, .{}),
         .dst = arg.RegReg(3, 9, .{ .b = .{ 2, 2 } }),
-        .op = ops.Abcd,
+        .op = op.Abcd,
         .size = Ctx.Size.Enc{ .fixed = .b },
     },
     isa.Instr{
@@ -69,7 +69,7 @@ const m68k_isa = isa.Isa(&.{
             .immediate = 4,
         }) }),
         .dst = arg.DataReg(9),
-        .op = ops.Add,
+        .op = op.Add,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -77,7 +77,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1101xxx1xxxxxxxx"),
         .src = arg.DataReg(9),
         .dst = arg.Ea(3, 0, .{}),
-        .op = ops.Add,
+        .op = op.Add,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -93,7 +93,7 @@ const m68k_isa = isa.Isa(&.{
             }),
         }),
         .dst = arg.AddrReg(9),
-        .op = ops.Adda,
+        .op = op.Adda,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
     },
     isa.Instr{
@@ -101,7 +101,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("00000110xxxxxxxx"),
         .src = arg.Imm,
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
-        .op = ops.Add,
+        .op = op.Add,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -109,7 +109,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("0101xxx0xxxxxxxx"),
         .src = arg.Opcode(u3, 9),
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
-        .op = ops.Add,
+        .op = op.Add,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -117,7 +117,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("0101xxx0xx001xxx"),
         .src = arg.Opcode(u3, 9),
         .dst = arg.AddrReg(0),
-        .op = ops.Adda,
+        .op = op.Adda,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
         .clk = 4,
     },
@@ -126,7 +126,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1101xxx1xx00xxxx"),
         .src = arg.RegReg(3, 0, .{}),
         .dst = arg.RegReg(3, 9, .{ .b = .{ 0, 2 }, .l = .{ 4, 2 } }),
-        .op = ops.Addx,
+        .op = op.Addx,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -137,7 +137,7 @@ const m68k_isa = isa.Isa(&.{
             .immediate = 4,
         }) }),
         .dst = arg.DataReg(9),
-        .op = ops.And,
+        .op = op.And,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -145,7 +145,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1100xxx1xxxxxxxx"),
         .src = arg.DataReg(9),
         .dst = arg.Ea(3, 0, .{}),
-        .op = ops.And,
+        .op = op.And,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -153,7 +153,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("00000010xx111100"),
         .src = arg.Imm,
         .dst = arg.Status,
-        .op = ops.And,
+        .op = op.And,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
         .clk = 12,
     },
@@ -162,7 +162,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("00000010xxxxxxxx"),
         .src = arg.Imm,
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
-        .op = ops.And,
+        .op = op.And,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -170,7 +170,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110000111xxxxxx"),
         .src = arg.Const(u3, 1),
         .dst = arg.Ea(3, 0, .{}),
-        .op = ops.Asl,
+        .op = op.Asl,
         .size = Ctx.Size.Enc{ .fixed = .w },
     },
     isa.Instr{
@@ -178,7 +178,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110xxx1xx000xxx"),
         .src = arg.Opcode(u3, 9),
         .dst = arg.DataReg(0),
-        .op = ops.Asl,
+        .op = op.Asl,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -186,7 +186,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110xxx1xx100xxx"),
         .src = arg.DataReg(9),
         .dst = arg.DataReg(0),
-        .op = ops.Asl,
+        .op = op.Asl,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -194,7 +194,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("00000000xx111100"),
         .src = arg.Imm,
         .dst = arg.Status,
-        .op = ops.Or,
+        .op = op.Or,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
         .clk = 12,
     },
@@ -203,7 +203,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("00000000xxxxxxxx"),
         .src = arg.Imm,
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
-        .op = ops.Or,
+        .op = op.Or,
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
