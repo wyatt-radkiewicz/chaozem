@@ -1,20 +1,4 @@
 .{
     .vectors = .{},
-    .tests = .{
-        .{
-            .env = .{
-                .code = .{0xD648},
-                .data = .{ 0, 0, 0, 0x1FFFF },
-                .addr = .{0x0001},
-                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
-            },
-            .expect = .{
-                .disasm = "add.w a0,d3",
-                .clk = 4,
-                .data = .{ 0, 0, 0, 0x10000 },
-                .addr = .{0x0001},
-                .flags = .{ .c = true, .v = false, .z = true, .n = false, .x = true },
-            },
-        },
-    },
+    .tests = .{},
 }

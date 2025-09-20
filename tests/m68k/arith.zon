@@ -1,0 +1,93 @@
+.{
+    .vectors = .{},
+    .tests = .{
+        .{
+            .env = .{
+                .code = .{0xD001},
+                .data = .{ 0x10, 0x20 },
+            },
+            .expect = .{
+                .disasm = "add.b d1,d0",
+                .clk = 4,
+                .data = .{ 0x30, 0x20 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD041},
+                .data = .{ 0xFFFF, 0x0001 },
+            },
+            .expect = .{
+                .disasm = "add.w d1,d0",
+                .clk = 4,
+                .data = .{ 0x0000, 0x0001 },
+                .flags = .{ .c = true, .v = false, .z = true, .n = false, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD081},
+                .data = .{ 0x7FFFFFFF, 0x1 },
+            },
+            .expect = .{
+                .disasm = "add.l d1,d0",
+                .clk = 8,
+                .data = .{ 0x80000000, 0x1 },
+                .flags = .{ .c = false, .v = true, .z = false, .n = true, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD0C9},
+                .addr = .{ 0x1000, 0x2000 },
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+            .expect = .{
+                .disasm = "adda.w a1,a0",
+                .clk = 8,
+                .addr = .{ 0x3000, 0x2000 },
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD101},
+                .data = .{ 0x01, 0x02 },
+                .flags = .{ .x = true },
+            },
+            .expect = .{
+                .disasm = "addx.b d1,d0",
+                .clk = 4,
+                .data = .{ 0x04, 0x02 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD101},
+                .data = .{ 0x0, 0x0 },
+                .flags = .{ .x = false, .z = true },
+            },
+            .expect = .{
+                .disasm = "addx.b d1,d0",
+                .clk = 4,
+                .data = .{ 0x0, 0x0 },
+                .flags = .{ .c = false, .v = false, .z = true, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xD101},
+                .data = .{ 0x1, 0x0 },
+                .flags = .{ .x = false, .z = true },
+            },
+            .expect = .{
+                .disasm = "addx.b d1,d0",
+                .clk = 4,
+                .data = .{ 0x1, 0x0 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+    },
+}

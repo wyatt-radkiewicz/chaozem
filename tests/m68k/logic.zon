@@ -1,0 +1,53 @@
+.{
+    .vectors = .{},
+    .tests = .{
+        .{
+            .env = .{
+                .code = .{0xC041},
+                .data = .{ 0x0000FFFF, 0x00000F0F },
+            },
+            .expect = .{
+                .disasm = "and.w d1,d0",
+                .clk = 4,
+                .data = .{ 0x00000F0F, 0x00000F0F },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
+        //.{
+        //    .env = .{
+        //        .code = .{0x8041},
+        //        .data = .{ 0x0000F0F0, 0x00000F0F },
+        //    },
+        //    .expect = .{
+        //        .disasm = "or.w d1,d0",
+        //        .clk = 4,
+        //        .data = .{ 0x0000FFFF, 0x00000F0F },
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0xB340},
+        //        .data = .{ 0x0000FFFF, 0x00000F0F },
+        //    },
+        //    .expect = .{
+        //        .disasm = "eor.w d1,d0",
+        //        .clk = 4,
+        //        .data = .{ 0x0000F0F0, 0x00000F0F },
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x4640},
+        //        .data = .{ 0xFFFFF0F0 },
+        //    },
+        //    .expect = .{
+        //        .disasm = "not.w d0",
+        //        .clk = 4,
+        //        .data = .{ 0xFFFF0F0F },
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = false },
+        //    },
+        //},
+    },
+}

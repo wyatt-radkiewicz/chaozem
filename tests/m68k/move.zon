@@ -1,0 +1,131 @@
+.{
+    .vectors = .{},
+    .tests = .{
+        //.{
+        //    .env = .{
+        //        .code = .{0x1001},
+        //        .data = .{ 0xAAAAAAAA, 0x12345678 },
+        //        .flags = .{ .x = true },
+        //    },
+        //    .expect = .{
+        //        .disasm = "move.b d1,d0",
+        //        .clk = 4,
+        //        .data = .{ 0xAAAAAA78, 0x12345678 },
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x1001},
+        //        .data = .{ 0xAAAAAAAA, 0x12345680 },
+        //        .flags = .{ .x = true },
+        //    },
+        //    .expect = .{
+        //        .disasm = "move.b d1,d0",
+        //        .clk = 4,
+        //        .data = .{ 0xAAAAAA80, 0x12345680 },
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = true, .x = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x1001},
+        //        .data = .{ 0xAAAAAAAA, 0x12345600 },
+        //        .flags = .{ .x = true },
+        //    },
+        //    .expect = .{
+        //        .disasm = "move.b d1,d0",
+        //        .clk = 4,
+        //        .data = .{ 0xAAAAAA00, 0x12345600 },
+        //        .flags = .{ .c = false, .v = false, .z = true, .n = false, .x = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x3001},
+        //        .data = .{ 0xAAAAAAAA, 0x12345678 },
+        //        .flags = .{ .x = true },
+        //    },
+        //    .expect = .{
+        //        .disasm = "move.w d1,d0",
+        //        .clk = 4,
+        //        .data = .{ 0xAAAA5678, 0x12345678 },
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x2001},
+        //        .data = .{ 0xAAAAAAAA, 0x12345678 },
+        //        .flags = .{ .x = true },
+        //    },
+        //    .expect = .{
+        //        .disasm = "move.l d1,d0",
+        //        .clk = 4,
+        //        .data = .{ 0x12345678, 0x12345678 },
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x3040},
+        //        .data = .{ 0x00008000 },
+        //        .addr = .{ 0xAAAAAAAA },
+        //        .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+        //    },
+        //    .expect = .{
+        //        .disasm = "movea.w d0,a0",
+        //        .clk = 4,
+        //        .data = .{ 0x00008000 },
+        //        .addr = .{ 0xFFFF8000 },
+        //        .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x2040},
+        //        .data = .{ 0x12345678 },
+        //        .addr = .{ 0xAAAAAAAA },
+        //        .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+        //    },
+        //    .expect = .{
+        //        .disasm = "movea.l d0,a0",
+        //        .clk = 4,
+        //        .data = .{ 0x12345678 },
+        //        .addr = .{ 0x12345678 },
+        //        .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x3010},
+        //        .data = .{0xAAAAAAAA},
+        //        .addr = .{0x1000},
+        //        .ram = .{0xABCD},
+        //        .flags = .{ .x = true },
+        //    },
+        //    .expect = .{
+        //        .disasm = "move.w (a0),d0",
+        //        .clk = 8,
+        //        .data = .{0xAAAAABCD},
+        //        .addr = .{0x1000},
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = true, .x = true },
+        //    },
+        //},
+        //.{
+        //    .env = .{
+        //        .code = .{0x3080},
+        //        .data = .{0x1234ABCD},
+        //        .addr = .{0x1000},
+        //    },
+        //    .expect = .{
+        //        .disasm = "move.w d0,(a0)",
+        //        .clk = 8,
+        //        .data = .{0x1234ABCD},
+        //        .addr = .{0x1000},
+        //        .ram = .{0xABCD},
+        //        .flags = .{ .c = false, .v = false, .z = false, .n = true },
+        //    },
+        //},
+    },
+}
