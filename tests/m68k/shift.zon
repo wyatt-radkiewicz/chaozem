@@ -1,0 +1,59 @@
+.{
+    .vectors = .{},
+    .tests = .{
+        .{
+            .env = .{
+                .code = .{0xE1D0},
+                .addr = .{0x1000},
+                .ram = .{0x8111},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "asl (a0)",
+                .clk = 12,
+                .addr = .{0x1000},
+                .ram = .{0x0222},
+                .flags = .{ .c = true, .v = true, .z = false, .n = false, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xE740},
+                .data = .{0xF000},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "asl.w #3,d0",
+                .clk = 12,
+                .data = .{0x8000},
+                .flags = .{ .c = true, .v = false, .z = false, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xE360},
+                .data = .{0xF000, 3},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "asl.w d1,d0",
+                .clk = 12,
+                .data = .{0x8000, 3},
+                .flags = .{ .c = true, .v = false, .z = false, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xE3A0},
+                .data = .{0x80000000, 65},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "asl.l d1,d0",
+                .clk = 10,
+                .data = .{0x00000000, 65},
+                .flags = .{ .c = true, .v = true, .z = true, .n = false, .x = true },
+            },
+        },
+    },
+}

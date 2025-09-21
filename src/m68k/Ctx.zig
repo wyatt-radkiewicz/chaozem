@@ -199,7 +199,7 @@ pub const Mode = enum {
                     .addr_idx, .pc_idx => |mode| {
                         const idx: Index = @bitCast(this.reader.takeInt(u16, .big) catch
                             return error.WriteFailed);
-                        try writer.print("({},", .{idx.disp});
+                        try writer.print("(#{},", .{idx.disp});
                         switch (mode) {
                             .addr_idx => try writer.print("a{}", .{this.reg}),
                             .pc_idx => try writer.print("pc", .{}),

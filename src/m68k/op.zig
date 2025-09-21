@@ -30,6 +30,7 @@ pub const Add = struct {
             @as(size.Int(.signed), @bitCast(dst)),
         )[1] == 1;
         const carry = @addWithOverflow(src, dst)[1] == 1;
+
         ctx.cpu.sr.x = carry;
         ctx.cpu.sr.n = int.negative(sum);
         ctx.cpu.sr.z = sum == 0;
@@ -54,15 +55,15 @@ pub const Addx = struct {
         src: size.Int(.unsigned),
         dst: size.Int(.unsigned),
     ) size.Int(.unsigned) {
+        const Signed = size.Int(.signed);
+
         const sum = src +% dst +% @intFromBool(ctx.cpu.sr.x);
         const overflow = @addWithOverflow(
-            @as(size.Int(.signed), @bitCast(src)),
-            @as(size.Int(.signed), @bitCast(dst +% 1)),
-        )[1] | @addWithOverflow(
-            @as(size.Int(.signed), @bitCast(dst)),
-            @as(size.Int(.signed), 1),
-        )[1] == 1;
+            @as(Signed, @bitCast(src)),
+            @as(Signed, @bitCast(dst +% 1)),
+        )[1] | @addWithOverflow(@as(Signed, @bitCast(dst)), @as(Signed, 1))[1] == 1;
         const carry = @addWithOverflow(src, dst)[1] | @addWithOverflow(dst, 1)[1] == 1;
+
         ctx.cpu.sr.x = carry;
         ctx.cpu.sr.n = int.negative(sum);
         ctx.cpu.sr.z = @intFromBool(ctx.cpu.sr.z) & @intFromBool(sum == 0) == 1;
@@ -88,27 +89,32 @@ pub const And = struct {
 };
 
 /// Arithmatic shift left
-pub const Asl = struct {
-    pub fn op(
-        ctx: *Ctx,
-        comptime size: Ctx.Size,
-        shift_amt: size.Int(.unsigned),
-        dst: size.Int(.unsigned),
-    ) size.Int(.unsigned) {
-        const shift: std.math.Log2Int(@TypeOf(dst)) = @truncate(@min(shift_amt, size.bits()));
-        const result = dst << shift;
-        const last_bit = @as(u1, @truncate(result >> size.bits() - 1 -| shift)) == 1;
-        const ovf_mask = (@as(size.Int(.unsigned), 1) << shift) - 1;
-        const chopped_bits = result >> @truncate(size.bits() - @as(u32, shift));
-        ctx.clk += (shift_amt -| 1) * 2;
-        ctx.cpu.sr.x = if (shift == 0) ctx.cpu.sr.x else last_bit;
-        ctx.cpu.sr.n = int.negative(result);
-        ctx.cpu.sr.z = result == 0;
-        ctx.cpu.sr.v = chopped_bits == ovf_mask or chopped_bits == 0;
-        ctx.cpu.sr.c = last_bit;
-        return result;
-    }
-};
+pub fn Asl(comptime add_cycles: bool) type {
+    return struct {
+        pub fn op(
+            ctx: *Ctx,
+            comptime size: Ctx.Size,
+            src: anytype,
+            dst: size.Int(.unsigned),
+        ) size.Int(.unsigned) {
+            const Full = std.meta.Int(.unsigned, size.bits() + 64);
+            const shift: u6 = if (@bitSizeOf(@TypeOf(src)) <= 6) src else @truncate(src);
+            const full = @as(Full, dst) << shift;
+            const result: size.Int(.unsigned) = @truncate(full);
+            ctx.clk += (@as(usize, shift) * 2 + (size.bits() / 16) * 2) * @intFromBool(add_cycles);
+
+            ctx.cpu.sr.x = if (shift == 0) ctx.cpu.sr.x else int.extract(bool, full, size.bits());
+            ctx.cpu.sr.n = int.negative(result);
+            ctx.cpu.sr.z = result == 0;
+            ctx.cpu.sr.v = v: {
+                const shifted = full >> size.bits() - 1;
+                break :v shifted != 0 and shifted != (@as(Full, 2) << shift) - 1;
+            };
+            ctx.cpu.sr.c = int.extract(bool, full, size.bits());
+            return result;
+        }
+    };
+}
 
 /// Normal or operation
 pub const Or = struct {

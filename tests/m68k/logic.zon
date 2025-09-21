@@ -13,41 +13,61 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = false },
             },
         },
-        //.{
-        //    .env = .{
-        //        .code = .{0x8041},
-        //        .data = .{ 0x0000F0F0, 0x00000F0F },
-        //    },
-        //    .expect = .{
-        //        .disasm = "or.w d1,d0",
-        //        .clk = 4,
-        //        .data = .{ 0x0000FFFF, 0x00000F0F },
-        //        .flags = .{ .c = false, .v = false, .z = false, .n = true },
-        //    },
-        //},
-        //.{
-        //    .env = .{
-        //        .code = .{0xB340},
-        //        .data = .{ 0x0000FFFF, 0x00000F0F },
-        //    },
-        //    .expect = .{
-        //        .disasm = "eor.w d1,d0",
-        //        .clk = 4,
-        //        .data = .{ 0x0000F0F0, 0x00000F0F },
-        //        .flags = .{ .c = false, .v = false, .z = false, .n = true },
-        //    },
-        //},
-        //.{
-        //    .env = .{
-        //        .code = .{0x4640},
-        //        .data = .{ 0xFFFFF0F0 },
-        //    },
-        //    .expect = .{
-        //        .disasm = "not.w d0",
-        //        .clk = 4,
-        //        .data = .{ 0xFFFF0F0F },
-        //        .flags = .{ .c = false, .v = false, .z = false, .n = false },
-        //    },
-        //},
+        .{
+            .env = .{
+                .code = .{0xC081},
+                .data = .{ 0xFFFFFFFF, 0xF0F00F0F },
+            },
+            .expect = .{
+                .disasm = "and.l d1,d0",
+                .clk = 8,
+                .data = .{ 0xF0F00F0F, 0xF0F00F0F },
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0xC0B0, 0x1002 },
+                .data = .{ 0xFFFFFFFF, 0x0002 },
+                .ram = .{ 0x0000, 0x1234, 0x00FF },
+                .addr = .{0x0FFE},
+            },
+            .expect = .{
+                .disasm = "and.l (#2,a0,d1.w),d0",
+                .clk = 20,
+                .ram = .{ 0x0000, 0x1234, 0x00FF },
+                .data = .{ 0x123400FF, 0x0002 },
+                .addr = .{0x0FFE},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0xC1B0, 0x1002 },
+                .data = .{ 0xF0F0F0F0, 0x0002 },
+                .ram = .{ 0x0000, 0x8234, 0x00FF },
+                .addr = .{0x0FFE},
+            },
+            .expect = .{
+                .disasm = "and.l d0,(#2,a0,d1.w)",
+                .clk = 26,
+                .ram = .{ 0x0000, 0x8030, 0x00F0 },
+                .data = .{ 0xF0F0F0F0, 0x0002 },
+                .addr = .{0x0FFE},
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0240, 0xF0F0 },
+                .data = .{ 0x12341234 },
+            },
+            .expect = .{
+                .disasm = "andi.w #$f0f0,d0",
+                .clk = 8,
+                .data = .{ 0x12341030 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
     },
 }

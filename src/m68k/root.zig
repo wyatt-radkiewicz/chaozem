@@ -168,9 +168,9 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "asl",
         .enc = .init("1110000111xxxxxx"),
-        .src = arg.Const(u3, 1),
+        .src = arg.Const(u4, 1),
         .dst = arg.Ea(3, 0, .{}),
-        .op = op.Asl,
+        .op = op.Asl(false),
         .size = Ctx.Size.Enc{ .fixed = .w },
     },
     isa.Instr{
@@ -178,7 +178,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110xxx1xx000xxx"),
         .src = arg.Opcode(u3, 9),
         .dst = arg.DataReg(0),
-        .op = op.Asl,
+        .op = op.Asl(true),
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -186,28 +186,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110xxx1xx100xxx"),
         .src = arg.DataReg(9),
         .dst = arg.DataReg(0),
-        .op = op.Asl,
+        .op = op.Asl(true),
         .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
-    },
-    isa.Instr{
-        .name = "ori",
-        .enc = .init("00000000xx111100"),
-        .src = arg.Imm,
-        .dst = arg.Status,
-        .op = op.Or,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
-        .clk = 12,
-    },
-    isa.Instr{
-        .name = "ori",
-        .enc = .init("00000000xxxxxxxx"),
-        .src = arg.Imm,
-        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
-        .op = op.Or,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
-    },
-    isa.Instr{
-        .name = "nop",
-        .enc = .init("0100111001110001"),
     },
 });
