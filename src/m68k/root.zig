@@ -13,7 +13,7 @@ const Bus = bus_interface.Bus(Cpu.width);
 /// Process an exception
 pub fn exception(vector: Cpu.Vector, cpu: *Cpu, bus: *Bus) usize {
     // Run exception specific code
-    var ctx = Ctx{ .cpu = cpu, .bus = bus };
+    var ctx = Ctx{ .cpu = cpu, .bus = bus, .clk = 2 };
     switch (vector) {
         .illegal => {
             ctx.clk += 12;
@@ -23,7 +23,7 @@ pub fn exception(vector: Cpu.Vector, cpu: *Cpu, bus: *Bus) usize {
         },
         _ => {},
     }
-    return ctx.clk + 2;
+    return ctx.clk;
 }
 
 /// Run one instruction
