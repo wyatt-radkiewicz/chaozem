@@ -115,20 +115,3 @@ pub fn Asl(comptime add_cycles: bool) type {
         }
     };
 }
-
-/// Normal or operation
-pub const Or = struct {
-    pub fn op(
-        ctx: *Ctx,
-        comptime size: Ctx.Size,
-        src: size.Int(.unsigned),
-        dst: size.Int(.unsigned),
-    ) size.Int(.unsigned) {
-        const result = src | dst;
-        ctx.cpu.sr.n = int.negative(result);
-        ctx.cpu.sr.z = result == 0;
-        ctx.cpu.sr.v = false;
-        ctx.cpu.sr.c = false;
-        return result;
-    }
-};
