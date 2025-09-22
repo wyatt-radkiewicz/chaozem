@@ -239,6 +239,48 @@ pub const Mode = enum {
     }
 };
 
+/// Conditionals
+pub const Cond = enum(u4) {
+    t,
+    f,
+    hi,
+    ls,
+    cc,
+    cs,
+    ne,
+    eq,
+    vc,
+    vs,
+    pl,
+    mi,
+    ge,
+    lt,
+    gt,
+    le,
+
+    /// Returns whether or not the conditional is true
+    pub fn value(this: @This(), s: Cpu.Status) bool {
+        return switch (this) {
+            .t => true,
+            .f => false,
+            .hi => !s.c and !s.z,
+            .ls => s.c or s.z,
+            .cc => !s.c,
+            .cs => s.c,
+            .ne => s.z,
+            .eq => !s.z,
+            .vc => !s.v,
+            .vs => s.v,
+            .pl => !s.n,
+            .mi => s.n,
+            .ge => s.n and s.v or !s.n and !s.v,
+            .lt => s.n and !s.v or !s.n and s.v,
+            .gt => s.n and s.v and !s.z or !s.n and !s.v and !s.z,
+            .le => s.z or s.n and !s.v or !s.n and s.v,
+        };
+    }
+};
+
 /// Fetch a type from the program counter of the cpu
 pub inline fn fetch(this: *Ctx, comptime Data: type) Data {
     const fetch_width = @max(16, @bitSizeOf(Data));
