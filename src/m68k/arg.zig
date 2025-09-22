@@ -159,7 +159,10 @@ pub fn Opcode(Data: type, at: u4) type {
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("#{any}", .{int.extract(Data, this.opcode, at)});
+                    try writer.print("{s}{any}", .{ switch (@typeInfo(Data)) {
+                        .int => "#",
+                        else => "",
+                    }, int.extract(Data, this.opcode, at) });
                 }
             };
         }

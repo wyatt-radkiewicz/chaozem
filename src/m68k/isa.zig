@@ -128,13 +128,10 @@ pub const Instr = struct {
                             0b11 => {
                                 const Src = instr.src orelse unreachable;
                                 const Dst = instr.dst orelse unreachable;
-                                try writer.print(" {f},{f}", .{ Src.Disasm(size){
-                                    .reader = reader,
-                                    .opcode = opcode,
-                                }, Dst.Disasm(size){
-                                    .reader = reader,
-                                    .opcode = opcode,
-                                } });
+                                try writer.print(" {f},{f}", .{
+                                    Src.Disasm(size){ .reader = reader, .opcode = opcode },
+                                    Dst.Disasm(size){ .reader = reader, .opcode = opcode },
+                                });
                             },
                         }
                     }

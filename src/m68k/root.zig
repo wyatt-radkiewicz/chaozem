@@ -58,7 +58,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.RegReg(3, 0, .{}),
         .dst = arg.RegReg(3, 9, .{ .b = .{ 2, 2 } }),
         .op = op.Abcd,
-        .size = Ctx.Size.Enc{ .fixed = .b },
+        .size = .{ .fixed = .b },
     },
     isa.Instr{
         .name = "add",
@@ -70,7 +70,7 @@ const m68k_isa = isa.Isa(&.{
         }) }),
         .dst = arg.DataReg(9),
         .op = op.Add,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "add",
@@ -78,7 +78,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.DataReg(9),
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Add,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "adda",
@@ -94,7 +94,7 @@ const m68k_isa = isa.Isa(&.{
         }),
         .dst = arg.AddrReg(9),
         .op = op.Adda,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
+        .size = .{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
     },
     isa.Instr{
         .name = "addi",
@@ -102,7 +102,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Imm,
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = op.Add,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "addq",
@@ -110,7 +110,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Opcode(u3, 9),
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = op.Add,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "addq",
@@ -118,7 +118,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Opcode(u3, 9),
         .dst = arg.AddrReg(0),
         .op = op.Adda,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
         .clk = 4,
     },
     isa.Instr{
@@ -127,7 +127,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.RegReg(3, 0, .{}),
         .dst = arg.RegReg(3, 9, .{ .b = .{ 0, 2 }, .l = .{ 4, 2 } }),
         .op = op.Addx,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "and",
@@ -138,7 +138,7 @@ const m68k_isa = isa.Isa(&.{
         }) }),
         .dst = arg.DataReg(9),
         .op = op.And,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "and",
@@ -146,7 +146,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.DataReg(9),
         .dst = arg.Ea(3, 0, .{}),
         .op = op.And,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "andi",
@@ -154,7 +154,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Imm,
         .dst = arg.Status,
         .op = op.And,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
         .clk = 12,
     },
     isa.Instr{
@@ -163,7 +163,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Imm,
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = op.And,
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "asl",
@@ -171,7 +171,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Const(u4, 1),
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Asd(false, .l),
-        .size = Ctx.Size.Enc{ .fixed = .w },
+        .size = .{ .fixed = .w },
     },
     isa.Instr{
         .name = "asl",
@@ -179,7 +179,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Opcode(u3, 9),
         .dst = arg.DataReg(0),
         .op = op.Asd(true, .l),
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "asl",
@@ -187,7 +187,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.DataReg(9),
         .dst = arg.DataReg(0),
         .op = op.Asd(true, .l),
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "asr",
@@ -195,7 +195,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Const(u4, 1),
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Asd(false, .r),
-        .size = Ctx.Size.Enc{ .fixed = .w },
+        .size = .{ .fixed = .w },
     },
     isa.Instr{
         .name = "asr",
@@ -203,7 +203,7 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Opcode(u3, 9),
         .dst = arg.DataReg(0),
         .op = op.Asd(true, .r),
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
         .name = "asr",
@@ -211,6 +211,6 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.DataReg(9),
         .dst = arg.DataReg(0),
         .op = op.Asd(true, .r),
-        .size = Ctx.Size.Enc{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
 });
