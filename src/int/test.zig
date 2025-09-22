@@ -22,3 +22,9 @@ test "negative" {
     try std.testing.expectEqual(true, int.negative(@as(u4, 0x8)));
     try std.testing.expectEqual(false, int.negative(@as(u4, 0x4)));
 }
+
+test "castsign" {
+    try std.testing.expectEqual(@as(i4, -8), int.castsign(.signed, @as(u4, 8)));
+    try std.testing.expectEqual(@as(i4, -4), int.castsign(.signed, @as(u4, 12)));
+    try std.testing.expectEqual(@as(u4, 12), int.castsign(.unsigned, @as(i4, -4)));
+}

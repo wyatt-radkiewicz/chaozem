@@ -26,8 +26,8 @@ pub const Add = struct {
     ) size.Int(.unsigned) {
         const sum = src +% dst;
         const overflow = @addWithOverflow(
-            @as(size.Int(.signed), @bitCast(src)),
-            @as(size.Int(.signed), @bitCast(dst)),
+            int.castsign(.signed, src),
+            int.castsign(.signed, dst),
         )[1] == 1;
         const carry = @addWithOverflow(src, dst)[1] == 1;
 
@@ -55,13 +55,11 @@ pub const Addx = struct {
         src: size.Int(.unsigned),
         dst: size.Int(.unsigned),
     ) size.Int(.unsigned) {
-        const Signed = size.Int(.signed);
-
         const sum = src +% dst +% @intFromBool(ctx.cpu.sr.x);
         const overflow = @addWithOverflow(
-            @as(Signed, @bitCast(src)),
-            @as(Signed, @bitCast(dst +% 1)),
-        )[1] | @addWithOverflow(@as(Signed, @bitCast(dst)), @as(Signed, 1))[1] == 1;
+            int.castsign(.signed, src),
+            int.castsign(.signed, dst +% 1),
+        )[1] | @addWithOverflow(int.castsign(.signed, dst), @as(size.Int(.signed), 1))[1] == 1;
         const carry = @addWithOverflow(src, dst)[1] | @addWithOverflow(dst, 1)[1] == 1;
 
         ctx.cpu.sr.x = carry;
@@ -88,8 +86,8 @@ pub const And = struct {
     }
 };
 
-/// Arithmatic shift left
-pub fn Asl(comptime add_cycles: bool) type {
+/// Arithmatic shift
+pub fn Asd(comptime add_cycles: bool, comptime dir: enum { r, l }) type {
     return struct {
         pub fn op(
             ctx: *Ctx,
@@ -99,18 +97,25 @@ pub fn Asl(comptime add_cycles: bool) type {
         ) size.Int(.unsigned) {
             const Full = std.meta.Int(.unsigned, size.bits() + 64);
             const shift: u6 = if (@bitSizeOf(@TypeOf(src)) <= 6) src else @truncate(src);
-            const full = @as(Full, dst) << shift;
-            const result: size.Int(.unsigned) = @truncate(full);
+            const full: Full = switch (dir) {
+                .l => @as(Full, dst) << shift,
+                .r => @bitCast(int.castsign(.signed, @as(Full, dst) << 64) >> shift),
+            };
+            const result: size.Int(.unsigned) = @truncate(full >> if (dir == .r) 64 else 0);
             ctx.clk += (@as(usize, shift) * 2 + (size.bits() / 16) * 2) * @intFromBool(add_cycles);
 
-            ctx.cpu.sr.x = if (shift == 0) ctx.cpu.sr.x else int.extract(bool, full, size.bits());
+            const last_bit = if (dir == .r) 63 else size.bits();
+            ctx.cpu.sr.x = if (shift == 0) ctx.cpu.sr.x else int.extract(bool, full, last_bit);
             ctx.cpu.sr.n = int.negative(result);
             ctx.cpu.sr.z = result == 0;
-            ctx.cpu.sr.v = v: {
-                const shifted = full >> size.bits() - 1;
-                break :v shifted != 0 and shifted != (@as(Full, 2) << shift) - 1;
+            ctx.cpu.sr.v = switch (dir) {
+                .r => false,
+                .l => v: {
+                    const shifted = full >> size.bits() - 1;
+                    break :v shifted != 0 and shifted != (@as(Full, 2) << shift) - 1;
+                },
             };
-            ctx.cpu.sr.c = int.extract(bool, full, size.bits());
+            ctx.cpu.sr.c = int.extract(bool, full, last_bit);
             return result;
         }
     };

@@ -30,3 +30,11 @@ pub inline fn overwrite(int: anytype, with: anytype) @TypeOf(int) {
 pub inline fn negative(int: anytype) bool {
     return @as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(int))), @bitCast(int)) < 0;
 }
+
+/// Casts the sign type of an integer
+pub inline fn castsign(
+    comptime signedness: std.builtin.Signedness,
+    int: anytype,
+) std.meta.Int(signedness, @bitSizeOf(@TypeOf(int))) {
+    return @bitCast(int);
+}
