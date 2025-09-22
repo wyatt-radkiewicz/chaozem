@@ -143,18 +143,14 @@ pub const Imm = struct {
 };
 
 /// Source data target that comes from the opcode
-pub fn Opcode(Int: type, at: u4) type {
+pub fn Opcode(Data: type, at: u4) type {
     return struct {
         pub fn decode(_: *Ctx, comptime _: Ctx.Size, _: u16) @This() {
             return .{};
         }
 
-        pub fn load(_: @This(), _: *Ctx, comptime size: Ctx.Size, opcode: u16) size.Int(.unsigned) {
-            const data = int.extract(Int, opcode, at);
-            return switch (@typeInfo(Int).int.signedness) {
-                .signed => int.extend(size.Int(.unsigned), data),
-                .unsigned => data,
-            };
+        pub fn load(_: @This(), _: *Ctx, comptime _: Ctx.Size, opcode: u16) Data {
+            return int.extract(Data, opcode, at);
         }
 
         pub fn Disasm(comptime _: Ctx.Size) type {
@@ -163,7 +159,7 @@ pub fn Opcode(Int: type, at: u4) type {
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("#{}", .{int.extract(Int, this.opcode, at)});
+                    try writer.print("#{any}", .{int.extract(Data, this.opcode, at)});
                 }
             };
         }

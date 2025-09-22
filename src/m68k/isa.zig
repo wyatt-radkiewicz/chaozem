@@ -99,9 +99,9 @@ pub const Instr = struct {
                         opcode: u16,
                     ) std.io.Writer.Error!void {
                         try writer.print("{s}", .{instr.name});
-                        switch (instr.size) {
-                            .fixed => {},
-                            .dyn => try writer.print(".{s}", .{@tagName(size)}),
+                        switch (size) {
+                            .none => {},
+                            else => try writer.print(".{s}", .{@tagName(size)}),
                         }
                         switch (comptime @as(u2, @intFromBool(@hasDecl(
                             instr.src orelse struct {},

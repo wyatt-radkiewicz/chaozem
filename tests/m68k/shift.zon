@@ -9,7 +9,7 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
             },
             .expect = .{
-                .disasm = "asl (a0)",
+                .disasm = "asl.w (a0)",
                 .clk = 12,
                 .addr = .{0x1000},
                 .ram = .{0x0222},
@@ -63,7 +63,7 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
             },
             .expect = .{
-                .disasm = "asr (a0)",
+                .disasm = "asr.w (a0)",
                 .clk = 12,
                 .addr = .{0x1000},
                 .ram = .{0xC088},
