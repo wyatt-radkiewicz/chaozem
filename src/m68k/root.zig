@@ -122,6 +122,15 @@ const m68k_isa = isa.Isa(&.{
         .clk = 4,
     },
     isa.Instr{
+        .name = "addq",
+        .enc = .init("01010000xx001xxx"),
+        .src = arg.Const(u3, 8),
+        .dst = arg.AddrReg(0),
+        .op = op.Adda,
+        .size = .{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
+        .clk = 4,
+    },
+    isa.Instr{
         .name = "addx",
         .enc = .init("1101xxx1xx00xxxx"),
         .src = arg.RegReg(3, 0, .{}),
