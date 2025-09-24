@@ -124,7 +124,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "addq",
         .enc = .init("01010000xx001xxx"),
-        .src = arg.Const(u3, 8),
+        .src = arg.Const(u4, 8),
         .dst = arg.AddrReg(0),
         .op = op.Adda,
         .size = .{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
@@ -181,6 +181,7 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Asd(false, .l),
         .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
     },
     isa.Instr{
         .name = "asl",
@@ -205,6 +206,7 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Asd(false, .r),
         .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
     },
     isa.Instr{
         .name = "asr",

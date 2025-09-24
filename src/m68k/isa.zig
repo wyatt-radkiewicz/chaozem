@@ -20,6 +20,8 @@ pub const Instr = struct {
     size: Ctx.Size.Enc = .{ .fixed = .none },
     /// Any extra cycles to add to the instruction execution
     clk: usize = 0,
+    /// This is how the disassembly should be output
+    disasm: ?[]const Token = null,
 
     /// Get all instruction permutations for this
     fn getSizes(comptime this: @This()) []const Spec {
@@ -98,44 +100,73 @@ pub const Instr = struct {
                         reader: *std.io.Reader,
                         opcode: u16,
                     ) std.io.Writer.Error!void {
-                        try writer.print("{s}", .{instr.name});
-                        switch (size) {
-                            .none => {},
-                            else => try writer.print(".{s}", .{@tagName(size)}),
-                        }
-                        switch (comptime @as(u2, @intFromBool(@hasDecl(
-                            instr.src orelse struct {},
-                            "Disasm",
-                        ))) << 1 | @as(u2, @intFromBool(@hasDecl(
-                            instr.dst orelse struct {},
-                            "Disasm",
-                        )))) {
-                            0b00 => {},
-                            0b10 => {
-                                const Src = instr.src orelse unreachable;
-                                try writer.print(" {f}", .{Src.Disasm(size){
-                                    .reader = reader,
-                                    .opcode = opcode,
-                                }});
-                            },
-                            0b01 => {
-                                const Dst = instr.dst orelse unreachable;
-                                try writer.print(" {f}", .{Dst.Disasm(size){
-                                    .reader = reader,
-                                    .opcode = opcode,
-                                }});
-                            },
-                            0b11 => {
-                                const Src = instr.src orelse unreachable;
-                                const Dst = instr.dst orelse unreachable;
-                                try writer.print(" {f},{f}", .{
-                                    Src.Disasm(size){ .reader = reader, .opcode = opcode },
-                                    Dst.Disasm(size){ .reader = reader, .opcode = opcode },
-                                });
-                            },
+                        inline for (comptime instr.disasm orelse Token.default(instr)) |token| {
+                            try writer.print("{f}", .{Token.Disasm(instr, size){
+                                .token = token,
+                                .reader = reader,
+                                .opcode = opcode,
+                            }});
                         }
                     }
                 }.disasm,
+            };
+        }
+    };
+
+    /// Tokens that can be found in the instruction disassembly
+    pub const Token = enum {
+        name,
+        size,
+        src,
+        dst,
+        comma,
+        space,
+
+        /// Make a default token list based on an instruction
+        fn default(comptime instr: Instr) []const @This() {
+            const tokens = [_]Token{ .name, .size } ++
+                switch (@as(u2, @intFromBool(instr.src != null)) << 1 |
+                    @as(u2, @intFromBool(instr.dst != null))) {
+                    0b00 => [_]Token{},
+                    0b10 => [_]Token{ .space, .src },
+                    0b01 => [_]Token{ .space, .dst },
+                    0b11 => [_]Token{ .space, .src, .comma, .dst },
+                };
+            return &tokens;
+        }
+
+        /// Disassemble a token
+        fn Disasm(comptime instr: Instr, comptime size: Ctx.Size) type {
+            return struct {
+                token: Token,
+                opcode: u16,
+                reader: *std.io.Reader,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    switch (this.token) {
+                        .space => try writer.print(" ", .{}),
+                        .comma => try writer.print(",", .{}),
+                        .src => {
+                            const Src = instr.src orelse unreachable;
+                            try writer.print("{f}", .{Src.Disasm(size){
+                                .reader = this.reader,
+                                .opcode = this.opcode,
+                            }});
+                        },
+                        .dst => {
+                            const Dst = instr.dst orelse unreachable;
+                            try writer.print("{f}", .{Dst.Disasm(size){
+                                .reader = this.reader,
+                                .opcode = this.opcode,
+                            }});
+                        },
+                        .size => switch (size) {
+                            .none => {},
+                            else => try writer.print(".{s}", .{@tagName(size)}),
+                        },
+                        .name => try writer.print("{s}", .{instr.name}),
+                    }
+                }
             };
         }
     };

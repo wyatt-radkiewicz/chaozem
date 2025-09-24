@@ -179,6 +179,20 @@ pub fn Const(Type: type, val: Type) type {
         pub fn load(_: @This(), _: *Ctx, comptime _: Ctx.Size, _: u16) Type {
             return val;
         }
+
+        pub fn Disasm(comptime _: Ctx.Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    try writer.print("{s}{any}", .{ switch (@typeInfo(Type)) {
+                        .int => "#",
+                        else => "",
+                    }, val });
+                }
+            };
+        }
     };
 }
 
