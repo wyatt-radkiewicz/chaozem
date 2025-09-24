@@ -1,0 +1,53 @@
+.{
+    .vectors = .{},
+    .tests = .{
+        // Branch on signed HIgher (byte, taken)
+        .{
+            .env = .{
+                .code = .{0x6204},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "bhi.b #4",
+                .clk = 10,
+                .pc = 6,
+            },
+        },
+        // Branch on signed HIgher (byte, not taken)
+        .{
+            .env = .{
+                .code = .{0x6204},
+                .flags = .{ .c = true, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "bhi.b #4",
+                .clk = 8,
+                .pc = 2,
+            },
+        },
+        // Branch on unsigned Lower or Same (word, taken)
+        .{
+            .env = .{
+                .code = .{0x6300,0x0004},
+                .flags = .{ .c = true, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "bls.w #4",
+                .clk = 10,
+                .pc = 6,
+            },
+        },
+        // Branch on unsigned Lower or Same (word, not taken)
+        .{
+            .env = .{
+                .code = .{0x6300,0x0004},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "bls.w #4",
+                .clk = 12,
+                .pc = 4,
+            },
+        },
+    },
+}

@@ -9,7 +9,11 @@ pub inline fn extract(
 ) Type {
     const TypeInt = std.meta.Int(.unsigned, @bitSizeOf(Type));
     const FromInt = std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(from)));
-    return @bitCast(@as(TypeInt, @truncate(@as(FromInt, @bitCast(from)) >> at)));
+    const int = @as(TypeInt, @truncate(@as(FromInt, @bitCast(from)) >> at));
+    return switch (@typeInfo(Type)) {
+        .@"enum" => @enumFromInt(int),
+        else => @bitCast(int),
+    };
 }
 
 /// Sign extend a specified integer to the specified size

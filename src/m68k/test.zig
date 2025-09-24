@@ -72,7 +72,7 @@ const Test = struct {
         }
 
         // Check the final environment
-        this.expect.check(&ram, &cpu, cycles) catch {
+        this.expect.check(vectors, ram, cpu, cycles) catch {
             std.debug.print("test failed in \"{s}\" at \"{s}\"\n", err_ctx);
             return error.TestFailed;
         };
@@ -114,7 +114,7 @@ const Flags = struct {
     }
 
     /// Check the state of the cpu to see if it matches
-    fn check(this: @This(), cpu: *Cpu) !void {
+    fn check(this: @This(), cpu: Cpu) !void {
         try std.testing.expectEqual(this.c orelse cpu.sr.c, cpu.sr.c);
         try std.testing.expectEqual(this.v orelse cpu.sr.v, cpu.sr.v);
         try std.testing.expectEqual(this.z orelse cpu.sr.z, cpu.sr.z);
@@ -147,14 +147,18 @@ const Env = struct {
 const Expect = struct {
     disasm: []const u8,
     clk: ?usize = null,
+    pc: ?u32 = null,
     ram: ?[]const u16 = null,
     data: ?[]const u32 = null,
     addr: ?[]const u32 = null,
     flags: ?Flags = null,
 
     /// Check the state of the runner
-    fn check(this: @This(), ram: *Ram, cpu: *Cpu, cycles: usize) !void {
+    fn check(this: @This(), vectors: Vectors, ram: Ram, cpu: Cpu, cycles: usize) !void {
         try std.testing.expectEqual(this.clk orelse cycles, cycles);
+        if (this.pc) |pc| {
+            try std.testing.expectEqual(vectors.reset_pc + pc, cpu.pc);
+        }
         if (this.ram) |words| {
             try std.testing.expectEqualSlices(u16, words, ram.words[0..words.len]);
         }

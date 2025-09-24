@@ -112,35 +112,36 @@ pub const Status = struct {
 };
 
 /// Immediate source data target
-pub const Imm = struct {
-    pub fn decode(_: *Ctx, comptime _: Ctx.Size, _: u16) @This() {
-        return .{};
-    }
+pub fn Imm(fmt: FormatOptions) type {
+    return struct {
+        pub fn decode(_: *Ctx, comptime _: Ctx.Size, _: u16) @This() {
+            return .{};
+        }
 
-    pub fn load(_: @This(), ctx: *Ctx, comptime size: Ctx.Size, _: u16) size.Int(.unsigned) {
-        return ctx.fetch(size.Int(.unsigned));
-    }
+        pub fn load(_: @This(), ctx: *Ctx, comptime size: Ctx.Size, _: u16) size.Int(.unsigned) {
+            return ctx.fetch(size.Int(.unsigned));
+        }
 
-    pub fn Disasm(comptime size: Ctx.Size) type {
-        return struct {
-            reader: *std.io.Reader,
-            opcode: u16,
+        pub fn store(_: @This(), _: *Ctx, comptime _: Ctx.Size, _: u16, _: void) void {}
 
-            pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                switch (size) {
-                    .none => unreachable,
-                    .b => try writer.print("#${x:0>2}", .{@as(u8, @truncate(
-                        this.reader.takeInt(u16, .big) catch return error.WriteFailed,
-                    ))}),
-                    .w => try writer.print("#${x:0>4}", .{this.reader.takeInt(u16, .big) catch
-                        return error.WriteFailed}),
-                    .l => try writer.print("#${x:0>8}", .{this.reader.takeInt(u32, .big) catch
-                        return error.WriteFailed}),
+        pub fn Disasm(comptime size: Ctx.Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    try writer.print("{f}", .{Formatter(size.Int(.unsigned)){ .val = switch (size) {
+                        .none => unreachable,
+                        .b => @truncate(this.reader.takeInt(u16, .big) catch
+                            return error.WriteFailed),
+                        .w => this.reader.takeInt(u16, .big) catch return error.WriteFailed,
+                        .l => this.reader.takeInt(u32, .big) catch return error.WriteFailed,
+                    }, .options = fmt }});
                 }
-            }
-        };
-    }
-};
+            };
+        }
+    };
+}
 
 /// Source data target that comes from the opcode
 pub fn Opcode(Data: type, at: u4) type {
@@ -153,16 +154,18 @@ pub fn Opcode(Data: type, at: u4) type {
             return int.extract(Data, opcode, at);
         }
 
+        pub fn store(_: @This(), _: *Ctx, comptime _: Ctx.Size, _: u16, _: void) void {}
+
         pub fn Disasm(comptime _: Ctx.Size) type {
             return struct {
                 reader: *std.io.Reader,
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{s}{any}", .{ switch (@typeInfo(Data)) {
-                        .int => "#",
-                        else => "",
-                    }, int.extract(Data, this.opcode, at) });
+                    try writer.print("{f}", .{Formatter(Data){
+                        .val = int.extract(Data, this.opcode, at),
+                        .options = .{ .hex = false },
+                    }});
                 }
             };
         }
@@ -180,16 +183,18 @@ pub fn Const(Type: type, val: Type) type {
             return val;
         }
 
+        pub fn store(_: @This(), _: *Ctx, comptime _: Ctx.Size, _: u16, _: void) void {}
+
         pub fn Disasm(comptime _: Ctx.Size) type {
             return struct {
                 reader: *std.io.Reader,
                 opcode: u16,
 
                 pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{s}{any}", .{ switch (@typeInfo(Type)) {
-                        .int => "#",
-                        else => "",
-                    }, val });
+                    try writer.print("{f}", .{Formatter(Type){
+                        .val = val,
+                        .options = .{ .hex = false },
+                    }});
                 }
             };
         }
@@ -324,6 +329,34 @@ pub fn Ea(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
                     }});
                 }
             };
+        }
+    };
+}
+
+/// Formatter options
+pub const FormatOptions = struct {
+    hex: bool = true,
+};
+
+/// Print out a type that can be converted to bits
+fn Formatter(comptime Type: type) type {
+    return struct {
+        val: Type,
+        options: FormatOptions,
+
+        pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+            switch (@typeInfo(Type)) {
+                .@"enum" => try writer.print("{t}", .{this.val}),
+                .int => if (this.options.hex) {
+                    try writer.print(std.fmt.comptimePrint(
+                        "#${{x:0>{}}}",
+                        .{@bitSizeOf(Type) / 4},
+                    ), .{this.val});
+                } else {
+                    try writer.print("#{}", .{this.val});
+                },
+                else => try writer.print("{any}", .{this.val}),
+            }
         }
     };
 }
