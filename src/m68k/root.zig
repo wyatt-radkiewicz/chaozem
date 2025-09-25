@@ -259,4 +259,21 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .l },
         .clk = 2,
     },
+    isa.Instr{
+        .name = "bchg",
+        .enc = .init("0000xxx101xxxxxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Bit(.chg),
+        .size = .{ .fixed = .b },
+    },
+    isa.Instr{
+        .name = "bchg",
+        .enc = .init("0000xxx101000xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.DataReg(0),
+        .op = op.Bit(.chg),
+        .size = .{ .fixed = .l },
+        .clk = 2,
+    },
 });

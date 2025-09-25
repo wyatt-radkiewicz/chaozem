@@ -93,5 +93,17 @@
                 .flags = .{ .z = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x0340},
+                .data = .{ 0x0C000000, 59 },
+            },
+            .expect = .{
+                .disasm = "bchg.l d1,d0",
+                .clk = 8,
+                .data = .{ 0x04000000, 59 },
+                .flags = .{ .z = false },
+            },
+        },
     },
 }
