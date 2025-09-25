@@ -52,6 +52,7 @@ pub const Disasm = struct {
 
 /// M68k instruction set architecture
 const m68k_isa = isa.Isa(&.{
+    // Add binary coded decimal
     isa.Instr{
         .name = "abcd",
         .enc = .init("1100xxx10000xxxx"),
@@ -60,6 +61,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Abcd,
         .size = .{ .fixed = .b },
     },
+
+    // Add
     isa.Instr{
         .name = "add",
         .enc = .init("1101xxx0xxxxxxxx"),
@@ -80,6 +83,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Add,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Add address
     isa.Instr{
         .name = "adda",
         .enc = .init("1101xxxx11xxxxxx"),
@@ -96,6 +101,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Adda,
         .size = .{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
     },
+
+    // Add immediate
     isa.Instr{
         .name = "addi",
         .enc = .init("00000110xxxxxxxx"),
@@ -104,6 +111,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Add,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Add quick
     isa.Instr{
         .name = "addq",
         .enc = .init("0101xxx0xxxxxxxx"),
@@ -130,6 +139,8 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .dyn = .{ .at = 6, .w = 0b01, .l = 0b10 } },
         .clk = 4,
     },
+
+    // Add extend
     isa.Instr{
         .name = "addx",
         .enc = .init("1101xxx1xx00xxxx"),
@@ -138,6 +149,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Addx,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Logical and
     isa.Instr{
         .name = "and",
         .enc = .init("1100xxx0xxxxxxxx"),
@@ -157,6 +170,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.And,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Logical and immediate
     isa.Instr{
         .name = "andi",
         .enc = .init("00000010xx111100"),
@@ -174,6 +189,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.And,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Arithmatic shift left
     isa.Instr{
         .name = "asl",
         .enc = .init("1110000111xxxxxx"),
@@ -199,6 +216,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Asd(true, .l),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Arithmatic shift right
     isa.Instr{
         .name = "asr",
         .enc = .init("1110000011xxxxxx"),
@@ -224,6 +243,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Asd(true, .r),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Branch on condition
     isa.Instr{
         .name = "b",
         .enc = .init("0110xxxxxxxxxxxx"),
@@ -242,6 +263,8 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .src, .size, .space, .dst },
     },
+
+    // Test and change a bit
     isa.Instr{
         .name = "bchg",
         .enc = .init("0000100001xxxxxx"),
@@ -276,6 +299,8 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .l },
         .clk = 2,
     },
+
+    // Test and clear a bit
     isa.Instr{
         .name = "bclr",
         .enc = .init("0000100010xxxxxx"),
@@ -310,6 +335,8 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .l },
         .clk = 4,
     },
+
+    // Branch always
     isa.Instr{
         .name = "bra",
         .enc = .init("01100000xxxxxxxx"),
