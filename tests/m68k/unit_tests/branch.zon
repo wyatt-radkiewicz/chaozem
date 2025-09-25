@@ -28,7 +28,7 @@
         // Branch on unsigned Lower or Same (word, taken)
         .{
             .env = .{
-                .code = .{0x6300,0x0004},
+                .code = .{ 0x6300, 0x0004 },
                 .flags = .{ .c = true, .v = false, .z = false, .n = false, .x = false },
             },
             .expect = .{
@@ -40,13 +40,35 @@
         // Branch on unsigned Lower or Same (word, not taken)
         .{
             .env = .{
-                .code = .{0x6300,0x0004},
+                .code = .{ 0x6300, 0x0004 },
                 .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
             },
             .expect = .{
                 .disasm = "bls.w #4",
                 .clk = 12,
                 .pc = 4,
+            },
+        },
+        // Branch byte
+        .{
+            .env = .{
+                .code = .{0x6004},
+            },
+            .expect = .{
+                .disasm = "bra.b #4",
+                .clk = 10,
+                .pc = 6,
+            },
+        },
+        // Branch word
+        .{
+            .env = .{
+                .code = .{ 0x6000, 0x0004 },
+            },
+            .expect = .{
+                .disasm = "bra.w #4",
+                .clk = 10,
+                .pc = 6,
             },
         },
     },

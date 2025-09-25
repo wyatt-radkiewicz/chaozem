@@ -310,4 +310,22 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .l },
         .clk = 4,
     },
+    isa.Instr{
+        .name = "bra",
+        .enc = .init("01100000xxxxxxxx"),
+        .src = arg.Const(Ctx.Cond, .t),
+        .dst = arg.Opcode(u8, 0),
+        .op = op.Bcc,
+        .size = .{ .fixed = .b },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "bra",
+        .enc = .init("0110000000000000"),
+        .src = arg.Const(Ctx.Cond, .t),
+        .dst = arg.Imm(u16, .{ .hex = false }),
+        .op = op.Bcc,
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
 });
