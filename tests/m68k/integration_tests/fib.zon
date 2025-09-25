@@ -1,0 +1,14 @@
+.{
+    .{
+        .input = .{ .to = 0 },
+        .output = .{ .result = 0 },
+    },
+    .{
+        .input = .{ .to = 1 },
+        .output = .{ .result = 1 },
+    },
+    .{
+        .input = .{ .to = 10 },
+        .output = .{ .result = 55 },
+    },
+}

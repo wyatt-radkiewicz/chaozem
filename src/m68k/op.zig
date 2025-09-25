@@ -138,3 +138,25 @@ pub const Bcc = struct {
         }
     }
 };
+
+/// Do something with a bit
+pub fn Bit(comptime mode: enum { set, chg, clr, tst }) type {
+    return struct {
+        pub fn op(
+            ctx: *Ctx,
+            comptime size: Ctx.Size,
+            src: anytype,
+            dst: size.Int(.unsigned),
+        ) if (mode != .tst) size.Int(.unsigned) else void {
+            const bit = @as(size.Int(.unsigned), 1) << src;
+            ctx.clk += if (mode != .tst and @bitSizeOf(@TypeOf(src)) > 4 and src >= 16) 2 else 0;
+            ctx.cpu.sr.z = dst & bit == 0;
+            return switch (mode) {
+                .set => dst | bit,
+                .chg => dst ^ bit,
+                .clr => dst & ~bit,
+                .tst => {},
+            };
+        }
+    };
+}

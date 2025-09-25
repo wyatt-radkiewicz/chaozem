@@ -207,7 +207,7 @@ const Ram = struct {
 
 test "m68k tests" {
     // Run each test
-    var dir = try std.fs.cwd().openDir("tests/m68k", .{ .iterate = true });
+    var dir = try std.fs.cwd().openDir("tests/m68k/unit_tests", .{ .iterate = true });
     defer dir.close();
     var iter = dir.iterate();
     while (try iter.next()) |entry| {

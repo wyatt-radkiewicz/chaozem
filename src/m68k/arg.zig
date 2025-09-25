@@ -112,14 +112,18 @@ pub const Status = struct {
 };
 
 /// Immediate source data target
-pub fn Imm(fmt: FormatOptions) type {
+pub fn Imm(comptime Override: ?type, comptime fmt: FormatOptions) type {
     return struct {
+        fn Data(comptime size: Ctx.Size) type {
+            return Override orelse size.Int(.unsigned);
+        }
+
         pub fn decode(_: *Ctx, comptime _: Ctx.Size, _: u16) @This() {
             return .{};
         }
 
-        pub fn load(_: @This(), ctx: *Ctx, comptime size: Ctx.Size, _: u16) size.Int(.unsigned) {
-            return ctx.fetch(size.Int(.unsigned));
+        pub fn load(_: @This(), ctx: *Ctx, comptime size: Ctx.Size, _: u16) Data(size) {
+            return ctx.fetch(Data(size));
         }
 
         pub fn store(_: @This(), _: *Ctx, comptime _: Ctx.Size, _: u16, _: void) void {}
@@ -130,13 +134,16 @@ pub fn Imm(fmt: FormatOptions) type {
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{f}", .{Formatter(size.Int(.unsigned)){ .val = switch (size) {
-                        .none => unreachable,
-                        .b => @truncate(this.reader.takeInt(u16, .big) catch
-                            return error.WriteFailed),
-                        .w => this.reader.takeInt(u16, .big) catch return error.WriteFailed,
-                        .l => this.reader.takeInt(u32, .big) catch return error.WriteFailed,
-                    }, .options = fmt }});
+                    const bits = @bitSizeOf(Data(size));
+                    const err = error.WriteFailed;
+                    try writer.print("{f}", .{Formatter(Data(size)){ .val = @bitCast(@as(
+                        std.meta.Int(.unsigned, bits),
+                        @truncate(switch (bits) {
+                            else => unreachable,
+                            0...16 => this.reader.takeInt(u16, .big) catch return err,
+                            17...32 => this.reader.takeInt(u32, .big) catch return err,
+                        }),
+                    )), .options = fmt }});
                 }
             };
         }

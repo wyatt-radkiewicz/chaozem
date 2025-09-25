@@ -59,14 +59,38 @@
         },
         .{
             .env = .{
-                .code = .{ 0x0240, 0xF0F0 },
-                .data = .{ 0x12341234 },
+                .code = .{ 0x0840, 3 },
+                .data = .{0x00000000},
             },
             .expect = .{
-                .disasm = "andi.w #$f0f0,d0",
-                .clk = 8,
-                .data = .{ 0x12341030 },
-                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+                .disasm = "bchg.l #3,d0",
+                .clk = 10,
+                .data = .{0x00000008},
+                .flags = .{ .z = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0840, 59 },
+                .data = .{0x0C000000},
+            },
+            .expect = .{
+                .disasm = "bchg.l #27,d0",
+                .clk = 12,
+                .data = .{0x04000000},
+                .flags = .{ .z = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0878, 7, 0x1000 },
+                .ram = .{0x0000},
+            },
+            .expect = .{
+                .disasm = "bchg.b #7,($1000).w",
+                .clk = 20,
+                .ram = .{0x8000},
+                .flags = .{ .z = true },
             },
         },
     },
