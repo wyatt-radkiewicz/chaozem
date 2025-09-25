@@ -105,5 +105,17 @@
                 .flags = .{ .z = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x0380},
+                .data = .{ 0x000F0000, 16 },
+            },
+            .expect = .{
+                .disasm = "bclr.l d1,d0",
+                .clk = 10,
+                .data = .{ 0x000E0000, 16 },
+                .flags = .{ .z = false },
+            },
+        },
     },
 }
