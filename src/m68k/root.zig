@@ -250,7 +250,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("0110xxxxxxxxxxxx"),
         .src = arg.Opcode(Ctx.Cond, 8),
         .dst = arg.Opcode(u8, 0),
-        .op = op.Bcc,
+        .op = op.Branch,
         .size = .{ .fixed = .b },
         .disasm = &.{ .name, .src, .size, .space, .dst },
     },
@@ -259,7 +259,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("0110xxxx00000000"),
         .src = arg.Opcode(Ctx.Cond, 8),
         .dst = arg.Imm(u16, .{ .hex = false }),
-        .op = op.Bcc,
+        .op = op.Branch,
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .src, .size, .space, .dst },
     },
@@ -342,7 +342,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("01100000xxxxxxxx"),
         .src = arg.Const(Ctx.Cond, .t),
         .dst = arg.Opcode(u8, 0),
-        .op = op.Bcc,
+        .op = op.Branch,
         .size = .{ .fixed = .b },
         .disasm = &.{ .name, .size, .space, .dst },
     },
@@ -351,11 +351,11 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("0110000000000000"),
         .src = arg.Const(Ctx.Cond, .t),
         .dst = arg.Imm(u16, .{ .hex = false }),
-        .op = op.Bcc,
+        .op = op.Branch,
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst },
     },
-    
+
     // Test and set a bit
     isa.Instr{
         .name = "bset",
@@ -390,5 +390,25 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Bit(.set),
         .size = .{ .fixed = .l },
         .clk = 2,
+    },
+
+    // Branch to subroutine
+    isa.Instr{
+        .name = "bsr",
+        .enc = .init("01100001xxxxxxxx"),
+        .src = arg.Const(Ctx.Cond, .f),
+        .dst = arg.Opcode(u8, 0),
+        .op = op.Branch,
+        .size = .{ .fixed = .b },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "bsr",
+        .enc = .init("0110000100000000"),
+        .src = arg.Const(Ctx.Cond, .f),
+        .dst = arg.Imm(u16, .{ .hex = false }),
+        .op = op.Branch,
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
     },
 });

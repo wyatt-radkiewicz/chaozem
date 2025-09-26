@@ -122,17 +122,21 @@ pub fn Asd(comptime add_cycles: bool, comptime dir: enum { r, l }) type {
 }
 
 /// Conditional branching operations
-pub const Bcc = struct {
+pub const Branch = struct {
     pub fn op(
         ctx: *Ctx,
         comptime size: Ctx.Size,
         src: Ctx.Cond,
         dst: size.Int(.unsigned),
     ) void {
-        if (!src.value(ctx.cpu.sr)) {
+        const base = ctx.cpu.pc -% (size.bits() / 16 * 2);
+        if (src == .f) {
+            ctx.clk += 2;
+            ctx.push(u32, ctx.cpu.pc);
+            ctx.cpu.pc = base +% int.extend(u32, dst);
+        } else if (!src.value(ctx.cpu.sr)) {
             ctx.clk += 4;
         } else {
-            const base = ctx.cpu.pc -% if (size.bits() == 16) 2 else 0;
             ctx.clk += 2 + if (size.bits() == 8) 4 else 0;
             ctx.cpu.pc = base +% int.extend(u32, dst);
         }

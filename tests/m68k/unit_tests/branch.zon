@@ -63,11 +63,12 @@
         // Branch word
         .{
             .env = .{
-                .code = .{ 0x6000, 0x0004 },
+                .code = .{ 0x6100, 0x0004 },
             },
             .expect = .{
-                .disasm = "bra.w #4",
-                .clk = 10,
+                .disasm = "bsr.w #4",
+                .stack = .{0x0104},
+                .clk = 18,
                 .pc = 6,
             },
         },

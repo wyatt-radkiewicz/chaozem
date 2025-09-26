@@ -344,7 +344,7 @@ pub inline fn write(this: *Ctx, comptime Data: type, addr: u32, data: Data) void
 pub inline fn push(this: *Ctx, comptime Data: type, data: Data) void {
     const Push = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Data)));
     this.cpu.a[7] -%= @sizeOf(Push);
-    this.write(Push, this.cpu.a[7], @as(std.meta.Int(.unsigned, @bitSizeOf(Data)), data));
+    this.write(Push, this.cpu.a[7], @as(std.meta.Int(.unsigned, @bitSizeOf(Data)), @bitCast(data)));
 }
 
 /// Pop data off the stack

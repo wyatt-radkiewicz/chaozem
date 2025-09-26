@@ -24,11 +24,10 @@ const Test = struct {
     fn run(this: @This(), group: []const u8, vectors: Vectors, allocator: std.mem.Allocator) !void {
         // Setup the environment to test
         const err_ctx = .{ group, this.expect.disasm };
-        var rom = Rom{};
-        var ram = Ram{};
+        var rom = Rom.init(vectors, this.env.code);
+        var ram = Ram.init(this.env.ram);
         var cpu = Cpu{};
-        vectors.setup(&rom);
-        this.env.setup(vectors, &rom, &ram, &cpu);
+        this.env.setup(vectors, &cpu);
 
         // Create a bus interface to access the environment
         var bus = Bus.init(&.{
@@ -90,19 +89,8 @@ const Test = struct {
 
 /// Various interrupt vectors that can be set at the start of a test suite
 const Vectors = struct {
+    reset_sp: u32 = 0x2000,
     reset_pc: u32 = 0x100,
-
-    /// Setup the rom to have the vectors in it
-    fn setup(this: @This(), rom: *Rom) void {
-        inline for (comptime std.meta.fieldNames(Cpu.Vector)) |vector| {
-            if (@hasField(@This(), vector)) {
-                const addr = @field(Cpu.Vector, vector).addr();
-                const value = @field(this, vector);
-                rom.words[addr >> 1] = @truncate(value >> 1);
-                rom.words[addr >> 1 + 1] = @truncate(value);
-            }
-        }
-    }
 };
 
 /// Cpu status flags
@@ -140,14 +128,12 @@ const Env = struct {
     addr: []const u32 = &.{},
     flags: Flags = .{},
 
-    /// Initialize the state of the runner
-    fn setup(this: @This(), vectors: Vectors, rom: *Rom, ram: *Ram, cpu: *Cpu) void {
-        const code_start = vectors.reset_pc >> 1;
-        @memcpy(rom.words[code_start .. code_start + this.code.len], this.code);
-        @memcpy(ram.words[0..this.ram.len], this.ram);
+    /// Initialize the state of the cpu
+    fn setup(this: @This(), vectors: Vectors, cpu: *Cpu) void {
         @memcpy(cpu.d[0..this.data.len], this.data);
         @memcpy(cpu.a[0..this.addr.len], this.addr);
         cpu.pc = vectors.reset_pc;
+        cpu.a[7] = vectors.reset_sp;
         this.flags.setup(cpu);
     }
 };
@@ -160,6 +146,7 @@ const Expect = struct {
     ram: ?[]const u16 = null,
     data: ?[]const u32 = null,
     addr: ?[]const u32 = null,
+    stack: ?[]const u16 = null,
     flags: ?Flags = null,
 
     /// Check the state of the runner
@@ -170,6 +157,10 @@ const Expect = struct {
         }
         if (this.ram) |words| {
             try std.testing.expectEqualSlices(u16, words, ram.words[0..words.len]);
+        }
+        if (this.stack) |stack| {
+            const start = ram.words.len - stack.len;
+            try std.testing.expectEqualSlices(u16, stack, ram.words[start..ram.words.len]);
         }
         if (this.data) |data| {
             try std.testing.expectEqualSlices(u32, data, cpu.d[0..data.len]);
@@ -189,6 +180,25 @@ const Rom = struct {
     device: Device = .{ .read = read },
     write_addr: ?u24 = null,
     write_data: u16 = 0,
+    
+    /// Setup the rom with the vectors and code
+    fn init(vectors: Vectors, code: []const u16) @This() {
+        // Inject the vectors into the rom
+        var this = @This(){};
+        inline for (comptime std.meta.fieldNames(Cpu.Vector)) |vector| {
+            if (@hasField(@This(), vector)) {
+                const addr = @field(Cpu.Vector, vector).addr();
+                const value = @field(vectors, vector);
+                this.words[addr >> 1] = @truncate(value >> 1);
+                this.words[addr >> 1 + 1] = @truncate(value);
+            }
+        }
+        
+        // Inject the code into the rom
+        const code_start = vectors.reset_pc >> 1;
+        @memcpy(this.words[code_start .. code_start + code.len], code);
+        return this;
+    }
 
     /// Get data from ROM
     pub fn read(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask()) ?Cpu.width.Data() {
@@ -208,6 +218,13 @@ const Rom = struct {
 const Ram = struct {
     words: [0x1000 >> 1]u16 = [1]u16{0} ** (0x1000 >> 1),
     device: Device = .{ .read = read, .write = write },
+    
+    /// Initialize the ram chip
+    fn init(ram: []const u16) @This() {
+        var this = @This(){};
+        @memcpy(this.words[0..ram.len], ram);
+        return this;
+    }
 
     /// Get data from RAM
     pub fn read(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask()) ?u16 {

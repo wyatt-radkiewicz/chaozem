@@ -39,6 +39,7 @@ pub const Status = packed struct {
 
 /// Processor vectors
 pub const Vector = enum(u5) {
+    reset_sp = 0,
     reset_pc = 1,
     illegal = 4,
     _,
