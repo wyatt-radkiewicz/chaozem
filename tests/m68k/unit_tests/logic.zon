@@ -129,5 +129,17 @@
                 .flags = .{ .z = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{ 0x0800, 3 },
+                .data = .{0x00000000},
+            },
+            .expect = .{
+                .disasm = "btst.l #3,d0",
+                .clk = 10,
+                .data = .{0x00000000},
+                .flags = .{ .z = true },
+            },
+        },
     },
 }

@@ -411,4 +411,40 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst },
     },
+    
+    // Test a bit
+    isa.Instr{
+        .name = "btst",
+        .enc = .init("0000100000xxxxxx"),
+        .src = arg.Imm(u3, .{ .hex = false }),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Bit(.tst),
+        .size = .{ .fixed = .b },
+    },
+    isa.Instr{
+        .name = "btst",
+        .enc = .init("0000100000000xxx"),
+        .src = arg.Imm(u5, .{ .hex = false }),
+        .dst = arg.DataReg(0),
+        .op = op.Bit(.tst),
+        .size = .{ .fixed = .l },
+        .clk = 2,
+    },
+    isa.Instr{
+        .name = "btst",
+        .enc = .init("0000xxx100xxxxxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Bit(.tst),
+        .size = .{ .fixed = .b },
+    },
+    isa.Instr{
+        .name = "btst",
+        .enc = .init("0000xxx100000xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.DataReg(0),
+        .op = op.Bit(.tst),
+        .size = .{ .fixed = .l },
+        .clk = 2,
+    },
 });

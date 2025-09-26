@@ -76,7 +76,9 @@ pub const Instr = struct {
                                     Op.op(ctx, size, dst.load(ctx, size, opcode))
                                 else
                                     dst.load(ctx, size, opcode);
-                                dst.store(ctx, size, opcode, res);
+                                if (@TypeOf(res) != void) {
+                                    dst.store(ctx, size, opcode, res);
+                                }
                             },
                             0b11 => {
                                 const Src = instr.src orelse unreachable;
@@ -89,7 +91,9 @@ pub const Instr = struct {
                                     Op.op(ctx, size, src_data, dst_data)
                                 else
                                     src_data;
-                                dst_target.store(ctx, size, opcode, res);
+                                if (@TypeOf(res) != void) {
+                                    dst_target.store(ctx, size, opcode, res);
+                                }
                             },
                         }
                     }
@@ -179,6 +183,8 @@ const Opcode = struct {
 
     /// Match '0','1', or 'x'
     pub fn init(enc: *const [16]u8) @This() {
+        @setEvalBranchQuota(10000);
+
         var set: u16 = 0;
         var any: u16 = 0;
         for (enc) |char| {
