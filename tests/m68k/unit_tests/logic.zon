@@ -117,5 +117,17 @@
                 .flags = .{ .z = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{ 0x08c0, 3 },
+                .data = .{0x00000000},
+            },
+            .expect = .{
+                .disasm = "bset.l #3,d0",
+                .clk = 10,
+                .data = .{0x00000008},
+                .flags = .{ .z = true },
+            },
+        },
     },
 }
