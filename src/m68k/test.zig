@@ -76,6 +76,15 @@ const Test = struct {
             std.debug.print("test failed in \"{s}\" at \"{s}\"\n", err_ctx);
             return error.TestFailed;
         };
+
+        // Check that ROM wasn't accidentally written to
+        if (rom.write_addr) |addr| {
+            std.debug.print(
+                \\ test failed in \"{s}\" at \"{s}\"
+                \\ wrote 0x{x:0>4} to ROM at 0x{x:0>6}
+            , err_ctx ++ .{ addr, rom.write_data });
+            return error.TestFailed;
+        }
     }
 };
 
@@ -178,11 +187,20 @@ const Expect = struct {
 const Rom = struct {
     words: [0x1000 >> 1]u16 = [1]u16{0} ** (0x1000 >> 1),
     device: Device = .{ .read = read },
+    write_addr: ?u24 = null,
+    write_data: u16 = 0,
 
     /// Get data from ROM
     pub fn read(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask()) ?Cpu.width.Data() {
         const this: *@This() = @fieldParentPtr("device", dev);
         return this.words[addr];
+    }
+
+    /// Write data to ROM, (this does nothing but log the write)
+    pub fn write(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask(), data: u16) void {
+        const this: *@This() = @fieldParentPtr("device", dev);
+        this.write_addr = @as(u24, addr) << 1;
+        this.write_data = data;
     }
 };
 
