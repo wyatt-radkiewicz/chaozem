@@ -91,6 +91,7 @@ const Test = struct {
 const Vectors = struct {
     reset_sp: u32 = 0x2000,
     reset_pc: u32 = 0x100,
+    chk: u32 = 0x100,
 };
 
 /// Cpu status flags
@@ -186,11 +187,11 @@ const Rom = struct {
         // Inject the vectors into the rom
         var this = @This(){};
         inline for (comptime std.meta.fieldNames(m68k.Vector)) |vector| {
-            if (@hasField(@This(), vector)) {
+            if (@hasField(Vectors, vector)) {
                 const addr = @field(m68k.Vector, vector).addr();
                 const value = @field(vectors, vector);
-                this.words[addr >> 1] = @truncate(value >> 1);
-                this.words[addr >> 1 + 1] = @truncate(value);
+                this.words[addr >> 1] = @truncate(value >> 16);
+                this.words[(addr >> 1) + 1] = @truncate(value);
             }
         }
 

@@ -22,10 +22,12 @@ pub const Status = packed struct {
     n: bool = false,
     /// Extend
     x: bool = false,
-    _pad0: u3 = 0,
+    /// Reserved bits
+    reserved5: u3 = 0,
     /// Interrupt priority level
     ipl: u3 = 0,
-    _pad1: u1 = 0,
+    /// Reserved bits
+    reserved8: u1 = 0,
     /// Master
     m: bool = false,
     /// Supervisor

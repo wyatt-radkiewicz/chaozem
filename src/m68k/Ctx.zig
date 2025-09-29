@@ -27,9 +27,9 @@ pub const Size = enum {
     /// Long (32 bits)
     l,
 
-    /// Get the integer type for this operation size
-    pub fn Int(comptime this: @This(), comptime signedness: std.builtin.Signedness) type {
-        return std.meta.Int(signedness, this.bits());
+    /// Get the unsigned integer type for this operation size
+    pub fn Int(comptime this: @This()) type {
+        return std.meta.Int(.unsigned, this.bits());
     }
 
     /// Get the number of bits for this size
@@ -247,6 +247,7 @@ pub const Vector = enum(u5) {
     reset_sp = 0,
     reset_pc = 1,
     illegal = 4,
+    chk = 6,
     _,
 
     /// Get the address of the vector in the memory map
@@ -256,17 +257,30 @@ pub const Vector = enum(u5) {
 
     /// Handle exception
     pub fn handle(this: @This(), ctx: *Ctx) void {
-        ctx.clk += 2;
         switch (this) {
-            .illegal => {
-                ctx.clk += 12;
-                ctx.push(u32, ctx.cpu.pc);
-                ctx.push(Cpu.Status, ctx.cpu.sr);
-                ctx.cpu.pc = ctx.read(u32, this.addr());
-            },
-            _ => {},
+            .illegal => Group.@"1".handle(this, ctx, 14),
+            .chk => Group.@"2".handle(this, ctx, 12),
+            else => {},
         }
     }
+
+    /// Exception group
+    const Group = enum {
+        @"1",
+        @"2",
+
+        /// Handle an exception in that exception group
+        pub fn handle(this: @This(), vector: Vector, ctx: *Ctx, extra_clks: usize) void {
+            ctx.clk += extra_clks;
+            switch (this) {
+                .@"1", .@"2" => {
+                    ctx.push(u32, ctx.cpu.pc);
+                    ctx.push(Cpu.Status, ctx.cpu.sr);
+                    ctx.cpu.pc = ctx.read(u32, vector.addr());
+                },
+            }
+        }
+    };
 };
 
 /// Conditionals
@@ -372,17 +386,19 @@ pub inline fn write(this: *Ctx, comptime Data: type, addr: u32, data: Data) void
 
 /// Push data onto the stack
 pub inline fn push(this: *Ctx, comptime Data: type, data: Data) void {
-    const Push = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Data)));
+    const bits = @bitSizeOf(Data);
+    const Push = std.meta.Int(.unsigned, @max(16, bits));
     this.cpu.a[7] -%= @sizeOf(Push);
-    this.write(Push, this.cpu.a[7], @as(std.meta.Int(.unsigned, @bitSizeOf(Data)), @bitCast(data)));
+    this.write(Push, this.cpu.a[7], @as(std.meta.Int(.unsigned, bits), @bitCast(data)));
 }
 
 /// Pop data off the stack
 pub inline fn pop(this: *Ctx, comptime Data: type) Data {
-    const Push = std.meta.Int(.unsigned, @max(16, @bitSizeOf(Data)));
+    const bits = @bitSizeOf(Data);
+    const Push = std.meta.Int(.unsigned, @max(16, bits));
     const data = this.read(Push, this.cpu.a[7]);
     this.cpu.a[7] +%= @sizeOf(Push);
-    return @bitCast(@as(std.meta.Int(.unsigned, @bitSizeOf(Data)), @truncate(data)));
+    return @bitCast(@as(std.meta.Int(.unsigned, bits), @truncate(data)));
 }
 
 /// Converts a byte to a binary coded decimal byte
