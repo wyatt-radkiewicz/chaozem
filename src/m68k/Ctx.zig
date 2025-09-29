@@ -10,8 +10,11 @@ const Cpu = @import("Cpu.zig");
 const Ctx = @This();
 
 cpu: *Cpu,
-bus: *const Bus(Cpu.width),
+bus: *const Bus(bus_width),
 clk: usize = 0,
+
+/// M68K processesor bus width
+pub const bus_width = bus_interface.Width{ .addr = 23, .data = 16 };
 
 /// M68K operation sizes
 pub const Size = enum {
@@ -236,6 +239,33 @@ pub const Mode = enum {
                 }
             }
         };
+    }
+};
+
+/// Processor vectors
+pub const Vector = enum(u5) {
+    reset_sp = 0,
+    reset_pc = 1,
+    illegal = 4,
+    _,
+
+    /// Get the address of the vector in the memory map
+    pub fn addr(this: @This()) u32 {
+        return @as(u32, @intFromEnum(this)) * @sizeOf(u32);
+    }
+
+    /// Handle exception
+    pub fn handle(this: @This(), ctx: *Ctx) void {
+        ctx.clk += 2;
+        switch (this) {
+            .illegal => {
+                ctx.clk += 12;
+                ctx.push(u32, ctx.cpu.pc);
+                ctx.push(Cpu.Status, ctx.cpu.sr);
+                ctx.cpu.pc = ctx.read(u32, this.addr());
+            },
+            _ => {},
+        }
     }
 };
 

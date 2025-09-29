@@ -8,21 +8,18 @@ const Ctx = @import("Ctx.zig");
 const isa = @import("isa.zig");
 const op = @import("op.zig");
 
-const Bus = bus_interface.Bus(Cpu.width);
+const Bus = bus_interface.Bus(Ctx.bus_width);
+
+/// M68k vectors
+pub const Vector = Ctx.Vector;
+
+/// M68k processor width
+pub const bus_width = Ctx.bus_width;
 
 /// Process an exception
-pub fn exception(vector: Cpu.Vector, cpu: *Cpu, bus: *Bus) usize {
-    // Run exception specific code
-    var ctx = Ctx{ .cpu = cpu, .bus = bus, .clk = 2 };
-    switch (vector) {
-        .illegal => {
-            ctx.clk += 12;
-            ctx.push(u32, ctx.cpu.pc);
-            ctx.push(Cpu.Status, ctx.cpu.sr);
-            ctx.cpu.pc = ctx.read(u32, vector.addr());
-        },
-        _ => {},
-    }
+pub fn exception(vector: Ctx.Vector, cpu: *Cpu, bus: *Bus) usize {
+    var ctx = Ctx{ .cpu = cpu, .bus = bus };
+    vector.handle(&ctx);
     return ctx.clk;
 }
 
@@ -411,7 +408,7 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst },
     },
-    
+
     // Test a bit
     isa.Instr{
         .name = "btst",
@@ -446,5 +443,13 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Bit(.tst),
         .size = .{ .fixed = .l },
         .clk = 2,
+    },
+    isa.Instr{
+        .name = "chk",
+        .enc = .init("0100xxx110xxxxxx"),
+        .src = arg.Ea(3, 0, .{}),
+        .dst = arg.DataReg(9),
+        .op = op.Chk,
+        .size = .{ .fixed = .w },
     },
 });

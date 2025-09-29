@@ -5,9 +5,9 @@ const bus_interface = @import("bus");
 const Cpu = @import("Cpu.zig");
 const m68k = @import("root.zig");
 
-const Bus = bus_interface.Bus(Cpu.width);
-const Device = bus_interface.Device(Cpu.width);
-const Mapping = bus_interface.Mapping(Cpu.width);
+const Bus = bus_interface.Bus(m68k.bus_width);
+const Device = bus_interface.Device(m68k.bus_width);
+const Mapping = bus_interface.Mapping(m68k.bus_width);
 
 /// A list of tests
 const Tests = struct {
@@ -38,7 +38,7 @@ const Test = struct {
             Mapping{
                 .start = rom.words.len,
                 .size = ram.words.len,
-                .end = std.math.maxInt(Cpu.width.Addr()),
+                .end = std.math.maxInt(m68k.bus_width.Addr()),
             },
         }, &.{ &rom.device, &ram.device });
 
@@ -180,20 +180,20 @@ const Rom = struct {
     device: Device = .{ .read = read },
     write_addr: ?u24 = null,
     write_data: u16 = 0,
-    
+
     /// Setup the rom with the vectors and code
     fn init(vectors: Vectors, code: []const u16) @This() {
         // Inject the vectors into the rom
         var this = @This(){};
-        inline for (comptime std.meta.fieldNames(Cpu.Vector)) |vector| {
+        inline for (comptime std.meta.fieldNames(m68k.Vector)) |vector| {
             if (@hasField(@This(), vector)) {
-                const addr = @field(Cpu.Vector, vector).addr();
+                const addr = @field(m68k.Vector, vector).addr();
                 const value = @field(vectors, vector);
                 this.words[addr >> 1] = @truncate(value >> 1);
                 this.words[addr >> 1 + 1] = @truncate(value);
             }
         }
-        
+
         // Inject the code into the rom
         const code_start = vectors.reset_pc >> 1;
         @memcpy(this.words[code_start .. code_start + code.len], code);
@@ -201,13 +201,13 @@ const Rom = struct {
     }
 
     /// Get data from ROM
-    pub fn read(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask()) ?Cpu.width.Data() {
+    pub fn read(dev: *Device, addr: u23, _: u2) ?u16 {
         const this: *@This() = @fieldParentPtr("device", dev);
         return this.words[addr];
     }
 
     /// Write data to ROM, (this does nothing but log the write)
-    pub fn write(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask(), data: u16) void {
+    pub fn write(dev: *Device, addr: u23, _: u2, data: u16) void {
         const this: *@This() = @fieldParentPtr("device", dev);
         this.write_addr = @as(u24, addr) << 1;
         this.write_data = data;
@@ -218,7 +218,7 @@ const Rom = struct {
 const Ram = struct {
     words: [0x1000 >> 1]u16 = [1]u16{0} ** (0x1000 >> 1),
     device: Device = .{ .read = read, .write = write },
-    
+
     /// Initialize the ram chip
     fn init(ram: []const u16) @This() {
         var this = @This(){};
@@ -227,13 +227,13 @@ const Ram = struct {
     }
 
     /// Get data from RAM
-    pub fn read(dev: *Device, addr: Cpu.width.Addr(), _: Cpu.width.Mask()) ?u16 {
+    pub fn read(dev: *Device, addr: u23, _: u2) ?u16 {
         const this: *@This() = @fieldParentPtr("device", dev);
         return this.words[addr];
     }
 
     /// Set data in RAM
-    pub fn write(dev: *Device, addr: Cpu.width.Addr(), bytes: Cpu.width.Mask(), data: u16) void {
+    pub fn write(dev: *Device, addr: u23, bytes: u2, data: u16) void {
         const this: *@This() = @fieldParentPtr("device", dev);
         const mask = [4]u16{ 0x0000, 0x00FF, 0xFF00, 0xFFFF };
         this.words[addr] = this.words[addr] & ~mask[bytes] | data;

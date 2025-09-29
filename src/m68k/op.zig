@@ -164,3 +164,17 @@ pub fn Bit(comptime mode: enum { set, chg, clr, tst }) type {
         }
     };
 }
+
+/// Check a variable against some bounds
+pub const Chk = struct {
+    pub fn op(
+        ctx: *Ctx,
+        comptime size: Ctx.Size,
+        src: size.Int(.unsigned),
+        dst: size.Int(.unsigned),
+    ) void {
+        _ = ctx;
+        _ = src;
+        _ = dst;
+    }
+};

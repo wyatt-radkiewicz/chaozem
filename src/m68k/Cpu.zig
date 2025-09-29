@@ -10,9 +10,6 @@ pc: u32 = 0,
 /// Status register
 sr: Status = .{},
 
-/// M68K processesor bus width
-pub const width = bus_interface.Width{ .addr = 23, .data = 16 };
-
 /// M68K processor status flags
 pub const Status = packed struct {
     /// Carry
@@ -35,17 +32,4 @@ pub const Status = packed struct {
     s: bool = true,
     /// Trace level
     t: u2 = 0,
-};
-
-/// Processor vectors
-pub const Vector = enum(u5) {
-    reset_sp = 0,
-    reset_pc = 1,
-    illegal = 4,
-    _,
-
-    /// Get the address of the vector in the memory map
-    pub fn addr(this: @This()) u32 {
-        return @as(u32, @intFromEnum(this)) * @sizeOf(u32);
-    }
 };
