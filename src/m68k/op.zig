@@ -166,6 +166,17 @@ pub const Cmp = struct {
     }
 };
 
+/// Compare two operands
+pub const Cmpa = struct {
+    pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: u32) void {
+        const result = Arith(.l).sub(.{ dst, int.extend(u32, src) });
+        ctx.cpu.sr.n = int.negative(result.val);
+        ctx.cpu.sr.z = result.val == 0;
+        ctx.cpu.sr.v = result.overflow;
+        ctx.cpu.sr.c = result.carry;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {
