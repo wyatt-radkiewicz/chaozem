@@ -1,0 +1,49 @@
+.{
+    .vectors = .{},
+    .tests = .{
+        .{
+            .env = .{
+                .code = .{0xB240},
+                .data = .{ 0, 0 },
+            },
+            .expect = .{
+                .disasm = "cmp.w d0,d1",
+                .clk = 4,
+                .flags = .{ .n = false, .z = true, .v = false, .c = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xB001},
+                .data = .{ 10, 0 },
+            },
+            .expect = .{
+                .disasm = "cmp.b d1,d0",
+                .clk = 4,
+                .flags = .{ .n = false, .z = false, .v = false, .c = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xB002},
+                .data = .{ 0, 0, 10 },
+            },
+            .expect = .{
+                .disasm = "cmp.b d2,d0",
+                .clk = 4,
+                .flags = .{ .n = true, .z = false, .v = false, .c = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xB003},
+                .data = .{ 128, 0, 0, 100 },
+            },
+            .expect = .{
+                .disasm = "cmp.b d3,d0",
+                .clk = 4,
+                .flags = .{ .n = false, .z = false, .v = true, .c = false },
+            },
+        },
+    },
+}

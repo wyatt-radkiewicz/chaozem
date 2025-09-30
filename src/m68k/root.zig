@@ -458,4 +458,12 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
         .disasm = &.{ .name, .size, .space, .dst },
     },
+    isa.Instr{
+        .name = "cmp",
+        .enc = .init("1011xxx0xxxxxxxx"),
+        .src = arg.Ea(3, 0, .{ .l = .initDefault(2, .{}) }),
+        .dst = arg.DataReg(9),
+        .op = op.Cmp,
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
 });

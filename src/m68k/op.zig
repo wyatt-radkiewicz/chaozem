@@ -8,8 +8,7 @@ const Size = Ctx.Size;
 /// Binary decimal add operation
 pub const Abcd = struct {
     pub fn op(ctx: *Ctx, comptime _: Size, src: u8, dst: u8) u8 {
-        const result = Ctx.tobcd(Ctx.frombcd(src) + Ctx.frombcd(dst) +
-            @intFromBool(ctx.cpu.sr.x));
+        const result = Ctx.tobcd(Ctx.frombcd(src) + Ctx.frombcd(dst) + @intFromBool(ctx.cpu.sr.x));
         ctx.cpu.sr.x = result[1];
         ctx.cpu.sr.c = result[1];
         ctx.cpu.sr.z = @intFromBool(ctx.cpu.sr.z) & @intFromBool(result[1]) == 1;
@@ -20,19 +19,13 @@ pub const Abcd = struct {
 /// Normal addition operation
 pub const Add = struct {
     pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
-        const sum = src +% dst;
-        const overflow = @addWithOverflow(
-            int.castsign(.signed, src),
-            int.castsign(.signed, dst),
-        )[1] == 1;
-        const carry = @addWithOverflow(src, dst)[1] == 1;
-
-        ctx.cpu.sr.x = carry;
-        ctx.cpu.sr.n = int.negative(sum);
-        ctx.cpu.sr.z = sum == 0;
-        ctx.cpu.sr.v = overflow;
-        ctx.cpu.sr.c = carry;
-        return sum;
+        const result = Arith(size).add(.{ dst, src });
+        ctx.cpu.sr.x = result.carry;
+        ctx.cpu.sr.n = int.negative(result.val);
+        ctx.cpu.sr.z = result.val == 0;
+        ctx.cpu.sr.v = result.overflow;
+        ctx.cpu.sr.c = result.carry;
+        return result.val;
     }
 };
 
@@ -46,19 +39,13 @@ pub const Adda = struct {
 /// Extended addition operation
 pub const Addx = struct {
     pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
-        const sum = src +% dst +% @intFromBool(ctx.cpu.sr.x);
-        const overflow = @addWithOverflow(
-            int.castsign(.signed, src),
-            int.castsign(.signed, dst +% 1),
-        )[1] | @addWithOverflow(int.castsign(.signed, dst), 1)[1] == 1;
-        const carry = @addWithOverflow(src, dst)[1] | @addWithOverflow(dst, 1)[1] == 1;
-
-        ctx.cpu.sr.x = carry;
-        ctx.cpu.sr.n = int.negative(sum);
-        ctx.cpu.sr.z = @intFromBool(ctx.cpu.sr.z) & @intFromBool(sum == 0) == 1;
-        ctx.cpu.sr.v = overflow;
-        ctx.cpu.sr.c = carry;
-        return sum;
+        const result = Arith(size).add(.{ dst, src, @intFromBool(ctx.cpu.sr.x) });
+        ctx.cpu.sr.x = result.carry;
+        ctx.cpu.sr.n = int.negative(result.val);
+        ctx.cpu.sr.z = ctx.cpu.sr.z and result.val == 0;
+        ctx.cpu.sr.v = result.overflow;
+        ctx.cpu.sr.c = result.carry;
+        return result.val;
     }
 };
 
@@ -167,3 +154,85 @@ pub const Clr = struct {
         return 0;
     }
 };
+
+/// Compare two operands
+pub const Cmp = struct {
+    pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) void {
+        const result = Arith(size).sub(.{ dst, src });
+        ctx.cpu.sr.n = int.negative(result.val);
+        ctx.cpu.sr.z = result.val == 0;
+        ctx.cpu.sr.v = result.overflow;
+        ctx.cpu.sr.c = result.carry;
+    }
+};
+
+/// Do an arithmatic operation and get the results
+fn Arith(comptime size: Size) type {
+    return struct {
+        val: size.Int(),
+        overflow: bool,
+        carry: bool,
+
+        /// Adds integers (taken in as a tuple)
+        inline fn add(ints: anytype) @This() {
+            var this = @This(){ .val = ints[0], .overflow = false, .carry = false };
+            inline for (ints, 0..) |val, idx| {
+                if (comptime idx == 0) {
+                    continue;
+                }
+                this.overflow = @intFromBool(this.overflow) | @addWithOverflow(
+                    int.castsign(.signed, this.val),
+                    int.castsign(.signed, val),
+                )[1] == 1;
+                this.carry = @intFromBool(this.carry) | @addWithOverflow(
+                    int.castsign(.unsigned, this.val),
+                    int.castsign(.unsigned, val),
+                )[1] == 1;
+                this.val +%= int.castsign(.unsigned, val);
+            }
+            return this;
+        }
+
+        /// Subtracts integers (taken in as a tuple)
+        inline fn sub(ints: anytype) @This() {
+            var this = @This(){ .val = ints[0], .overflow = false, .carry = false };
+            inline for (ints, 0..) |val, idx| {
+                if (comptime idx == 0) {
+                    continue;
+                }
+                this.overflow = @intFromBool(this.overflow) | @subWithOverflow(
+                    int.castsign(.signed, this.val),
+                    int.castsign(.signed, val),
+                )[1] == 1;
+                this.carry = @intFromBool(this.carry) | @subWithOverflow(
+                    int.castsign(.unsigned, this.val),
+                    int.castsign(.unsigned, val),
+                )[1] == 1;
+                this.val -%= int.castsign(.unsigned, val);
+            }
+            return this;
+        }
+    };
+}
+
+test "add" {
+    try std.testing.expectEqual(
+        Arith(.b){ .val = 16 + 16 + 8, .overflow = false, .carry = false },
+        Arith(.b).add(.{ @as(u8, 8), @as(u8, 16), @as(u8, 16) }),
+    );
+    try std.testing.expectEqual(
+        Arith(.w){ .val = @as(u16, 0xFFFF) +% @as(u16, 1), .overflow = false, .carry = true },
+        Arith(.w).add(.{ @as(u16, 0xFFFF), @as(u16, 1) }),
+    );
+}
+
+test "sub" {
+    try std.testing.expectEqual(
+        Arith(.b){ .val = @bitCast(@as(i8, 16) - @as(i8, 32)), .overflow = false, .carry = true },
+        Arith(.b).sub(.{ @as(u8, 16), @as(u8, 32) }),
+    );
+    try std.testing.expectEqual(
+        Arith(.w){ .val = @as(u16, 0x8000) -% @as(u16, 100), .overflow = true, .carry = false },
+        Arith(.w).sub(.{ @as(u16, 0x8000), @as(u16, 100) }),
+    );
+}

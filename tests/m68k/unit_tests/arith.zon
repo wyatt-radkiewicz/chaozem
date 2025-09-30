@@ -41,7 +41,7 @@
             .env = .{
                 .code = .{0xD101},
                 .data = .{ 0x01, 0x02 },
-                .flags = .{ .x = true },
+                .flags = .{ .z = true, .x = true },
             },
             .expect = .{
                 .disasm = "addx.b d1,d0",
@@ -52,27 +52,27 @@
         },
         .{
             .env = .{
-                .code = .{0xD101},
-                .data = .{ 0x0, 0x0 },
+                .code = .{0xD102},
+                .data = .{ 0x0, 0, 0x0 },
                 .flags = .{ .x = false, .z = true },
             },
             .expect = .{
-                .disasm = "addx.b d1,d0",
+                .disasm = "addx.b d2,d0",
                 .clk = 4,
-                .data = .{ 0x0, 0x0 },
+                .data = .{ 0x0, 0, 0x0 },
                 .flags = .{ .c = false, .v = false, .z = true, .n = false, .x = false },
             },
         },
         .{
             .env = .{
-                .code = .{0xD101},
-                .data = .{ 0x1, 0x0 },
+                .code = .{0xD103},
+                .data = .{ 0x1, 0, 0, 0x0 },
                 .flags = .{ .x = false, .z = true },
             },
             .expect = .{
-                .disasm = "addx.b d1,d0",
+                .disasm = "addx.b d3,d0",
                 .clk = 4,
-                .data = .{ 0x1, 0x0 },
+                .data = .{ 0x1, 0, 0, 0x0 },
                 .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
             },
         },
