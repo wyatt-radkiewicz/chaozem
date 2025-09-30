@@ -57,5 +57,16 @@
                 .flags = .{ .n = false, .z = false, .v = false, .c = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x0C00, 0x000F},
+                .data = .{0x0F},
+            },
+            .expect = .{
+                .disasm = "cmpi.b #$0f,d0",
+                .clk = 8,
+                .flags = .{ .n = false, .z = true, .v = false, .c = false },
+            },
+        },
     },
 }

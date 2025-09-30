@@ -442,6 +442,8 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .l },
         .clk = 2,
     },
+
+    // Check a signed integer against bounds
     isa.Instr{
         .name = "chk",
         .enc = .init("0100xxx110xxxxxx"),
@@ -450,6 +452,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Chk,
         .size = .{ .fixed = .w },
     },
+
+    // Clear data
     isa.Instr{
         .name = "clr",
         .enc = .init("01000010xxxxxxxx"),
@@ -458,6 +462,8 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
         .disasm = &.{ .name, .size, .space, .dst },
     },
+
+    // Compare operands
     isa.Instr{
         .name = "cmp",
         .enc = .init("1011xxx0xxxxxxxx"),
@@ -466,6 +472,8 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Cmp,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Compare address operand to sign extended source operand
     isa.Instr{
         .name = "cmpa",
         .enc = .init("1011xxxx11xxxxxx"),
@@ -474,5 +482,15 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Cmpa,
         .size = .{ .dyn = .{ .at = 8, .w = 0, .l = 1 } },
         .clk = 2,
+    },
+
+    // Compare address operand to immiediate
+    isa.Instr{
+        .name = "cmpi",
+        .enc = .init("00001100xxxxxxxx"),
+        .src = arg.Imm(null, .{}),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(2, .{}) }),
+        .op = op.Cmp,
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
 });
