@@ -493,7 +493,7 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Cmp,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
-    
+
     // Compare address operand to registers or memory
     isa.Instr{
         .name = "cmpm",
@@ -502,5 +502,17 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.PostInc(9),
         .op = op.Cmp,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+
+    // Compare, decrement, and branch
+    isa.Instr{
+        .name = "db",
+        .enc = .init("0101xxxx11001xxx"),
+        .ctx = arg.Opcode(Ctx.Cond, 8),
+        .src = arg.Imm(null, .{ .hex = false }),
+        .dst = arg.DataReg(0),
+        .op = op.Dbcc,
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .ctx, .size, .space, .dst, .comma, .src },
     },
 });

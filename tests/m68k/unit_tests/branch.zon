@@ -72,5 +72,42 @@
                 .pc = 6,
             },
         },
+        // Test condition, decrement, and branch (taken)
+        .{
+            .env = .{
+                .code = .{ 0x51C8, 0x0004 },
+                .data = .{0x0001},
+            },
+            .expect = .{
+                .disasm = "dbf.w d0,#4",
+                .pc = 6,
+                .clk = 10,
+            },
+        },
+        // Test condition, decrement, and branch (not taken, counter expired)
+        .{
+            .env = .{
+                .code = .{ 0x51C8, 0x0004 },
+                .data = .{0x0000},
+            },
+            .expect = .{
+                .disasm = "dbf.w d0,#4",
+                .pc = 4,
+                .clk = 14,
+            },
+        },
+        // Test condition, decrement, and branch (not taken, condition met)
+        .{
+            .env = .{
+                .code = .{ 0x5BC8, 0x0004 },
+                .data = .{0x0001},
+                .flags = .{ .n = true },
+            },
+            .expect = .{
+                .disasm = "dbmi.w d0,#4",
+                .pc = 4,
+                .clk = 12,
+            },
+        },
     },
 }

@@ -10,6 +10,8 @@ pub const Instr = struct {
     name: []const u8,
     /// Opcode's encoding
     enc: Opcode,
+    /// A third source for the instruction, but not the destination
+    ctx: ?type = null,
     /// Source of the instruction
     src: ?type = null,
     /// Destination of the instruction
@@ -57,19 +59,20 @@ pub const Instr = struct {
                 .run = struct {
                     pub fn run(ctx: *Ctx, opcode: u16) void {
                         ctx.clk += instr.clk;
-                        switch (@as(u2, @intFromBool(instr.src != null)) << 1 |
-                            @as(u2, @intFromBool(instr.dst != null))) {
-                            0b00 => {
+                        switch (@as(u3, @intFromBool(instr.src != null)) << 2 |
+                            @as(u3, @intFromBool(instr.dst != null)) << 1 |
+                            @as(u3, @intFromBool(instr.ctx != null))) {
+                            0b000 => {
                                 const Op = instr.op orelse return;
                                 _ = Op.op(ctx, size);
                             },
-                            0b10 => {
+                            0b100 => {
                                 const Src = instr.src orelse unreachable;
                                 const Op = instr.op orelse return;
                                 _ = Op.op(ctx, size, Src.decode(ctx, size, opcode)
                                     .load(ctx, size, opcode));
                             },
-                            0b01 => {
+                            0b010 => {
                                 const Dst = instr.dst orelse unreachable;
                                 const dst = Dst.decode(ctx, size, opcode);
                                 const res = if (instr.op) |Op|
@@ -80,7 +83,7 @@ pub const Instr = struct {
                                     dst.store(ctx, size, opcode, res);
                                 }
                             },
-                            0b11 => {
+                            0b110 => {
                                 const Src = instr.src orelse unreachable;
                                 const Dst = instr.dst orelse unreachable;
                                 const src_target = Src.decode(ctx, size, opcode);
@@ -95,6 +98,25 @@ pub const Instr = struct {
                                     dst_target.store(ctx, size, opcode, res);
                                 }
                             },
+                            0b111 => {
+                                const Src = instr.src orelse unreachable;
+                                const Dst = instr.dst orelse unreachable;
+                                const ctx_target = (instr.ctx orelse unreachable)
+                                    .decode(ctx, size, opcode);
+                                const ctx_data = ctx_target.load(ctx, size, opcode);
+                                const src_target = Src.decode(ctx, size, opcode);
+                                const src_data = src_target.load(ctx, size, opcode);
+                                const dst_target = Dst.decode(ctx, size, opcode);
+                                const dst_data = dst_target.load(ctx, size, opcode);
+                                const res = if (instr.op) |Op|
+                                    Op.op(ctx, size, ctx_data, src_data, dst_data)
+                                else
+                                    src_data;
+                                if (@TypeOf(res) != void) {
+                                    dst_target.store(ctx, size, opcode, res);
+                                }
+                            },
+                            else => @compileError("Operand configuration unsupported"),
                         }
                     }
                 }.run,
@@ -123,20 +145,21 @@ pub const Instr = struct {
         size,
         src,
         dst,
+        ctx,
         comma,
         space,
 
         /// Make a default token list based on an instruction
         fn default(comptime instr: Instr) []const @This() {
-            const tokens = [_]Token{ .name, .size } ++
-                switch (@as(u2, @intFromBool(instr.src != null)) << 1 |
-                    @as(u2, @intFromBool(instr.dst != null))) {
-                    0b00 => [_]Token{},
-                    0b10 => [_]Token{ .space, .src },
-                    0b01 => [_]Token{ .space, .dst },
-                    0b11 => [_]Token{ .space, .src, .comma, .dst },
-                };
-            return &tokens;
+            return switch (@as(u3, @intFromBool(instr.src != null)) << 2 |
+                @as(u3, @intFromBool(instr.dst != null)) << 1 |
+                @as(u3, @intFromBool(instr.ctx != null))) {
+                0b000 => &[_]Token{ .name, .size },
+                0b100 => &[_]Token{ .name, .size, .space, .src },
+                0b010 => &[_]Token{ .name, .size, .space, .dst },
+                0b110 => &[_]Token{ .name, .size, .space, .src, .comma, .dst },
+                else => @compileError("Default operand configuration unsupported"),
+            };
         }
 
         /// Disassemble a token
@@ -160,6 +183,13 @@ pub const Instr = struct {
                         .dst => {
                             const Dst = instr.dst orelse unreachable;
                             try writer.print("{f}", .{Dst.Disasm(size){
+                                .reader = this.reader,
+                                .opcode = this.opcode,
+                            }});
+                        },
+                        .ctx => {
+                            const Opnd = instr.ctx orelse unreachable;
+                            try writer.print("{f}", .{Opnd.Disasm(size){
                                 .reader = this.reader,
                                 .opcode = this.opcode,
                             }});

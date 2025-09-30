@@ -177,6 +177,29 @@ pub const Cmpa = struct {
     }
 };
 
+/// Test condition, decrement, and branch
+pub const Dbcc = struct {
+    pub fn op(ctx: *Ctx, comptime size: Size, cnd: Ctx.Cond, src: u16, dst: size.Int()) size.Int() {
+        // Check the condition
+        if (cnd.value(ctx.cpu.sr)) {
+            ctx.clk += 4;
+            return dst;
+        }
+
+        // Check for the counter expiring or condition
+        const result = dst -% 1;
+        if (result == std.math.maxInt(size.Int())) {
+            ctx.clk += 6;
+            return result;
+        }
+
+        // Branch
+        ctx.cpu.pc = ctx.cpu.pc -% 2 +% int.extend(u32, src);
+        ctx.clk += 2;
+        return result;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {
