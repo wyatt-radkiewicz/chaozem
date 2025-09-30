@@ -45,5 +45,17 @@
                 .flags = .{ .n = false, .z = false, .v = true, .c = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0xB0C1},
+                .data = .{0x10000},
+                .addr = .{0x8000},
+            },
+            .expect = .{
+                .disasm = "cmpa.w a1,a0",
+                .clk = 6,
+                .flags = .{ .n = false, .z = false, .v = false, .c = false },
+            },
+        },
     },
 }
