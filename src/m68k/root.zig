@@ -5,16 +5,14 @@ const bus_interface = @import("bus");
 const arg = @import("arg.zig");
 pub const Cpu = @import("Cpu.zig");
 const Ctx = @import("Ctx.zig");
+/// M68k vectors
+pub const Vector = Ctx.Vector;
+/// M68k processor width
+pub const bus_width = Ctx.bus_width;
 const isa = @import("isa.zig");
 const op = @import("op.zig");
 
 const Bus = bus_interface.Bus(Ctx.bus_width);
-
-/// M68k vectors
-pub const Vector = Ctx.Vector;
-
-/// M68k processor width
-pub const bus_width = Ctx.bus_width;
 
 /// Process an exception
 pub fn exception(vector: Ctx.Vector, cpu: *Cpu, bus: *Bus) usize {
@@ -451,5 +449,13 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.DataReg(9),
         .op = op.Chk,
         .size = .{ .fixed = .w },
+    },
+    isa.Instr{
+        .name = "clr",
+        .enc = .init("01000010xxxxxxxx"),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 2 }) }),
+        .op = op.Clr,
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .disasm = &.{ .name, .size, .space, .dst },
     },
 });

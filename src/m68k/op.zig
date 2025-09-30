@@ -156,3 +156,14 @@ pub const Chk = struct {
         }
     }
 };
+
+/// Clear some data
+pub const Clr = struct {
+    pub fn op(ctx: *Ctx, comptime size: Size, _: size.Int()) size.Int() {
+        ctx.cpu.sr.n = false;
+        ctx.cpu.sr.z = true;
+        ctx.cpu.sr.v = false;
+        ctx.cpu.sr.c = false;
+        return 0;
+    }
+};
