@@ -59,13 +59,26 @@
         },
         .{
             .env = .{
-                .code = .{0x0C00, 0x000F},
+                .code = .{ 0x0C00, 0x000F },
                 .data = .{0x0F},
             },
             .expect = .{
                 .disasm = "cmpi.b #$0f,d0",
                 .clk = 8,
                 .flags = .{ .n = false, .z = true, .v = false, .c = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xB109},
+                .addr = .{ 0x2000, 0x2002 },
+                .ram = .{ 0xFF00, 0x1000 },
+            },
+            .expect = .{
+                .disasm = "cmpm.b (a1)+,(a0)+",
+                .clk = 12,
+                .addr = .{ 0x2001, 0x2003 },
+                .flags = .{ .n = true, .z = false, .v = false, .c = false },
             },
         },
     },

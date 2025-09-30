@@ -3,7 +3,6 @@ const std = @import("std");
 const int = @import("int");
 
 const Ctx = @import("Ctx.zig");
-
 const Size = Ctx.Size;
 
 /// Data register source or
@@ -60,6 +59,38 @@ pub fn AddrReg(n: u4) type {
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     try writer.print("a{}", .{int.extract(u3, this.opcode, n)});
+                }
+            };
+        }
+    };
+}
+
+/// Address register indirect post increment
+pub fn PostInc(n: u4) type {
+    return struct {
+        n: u3,
+
+        pub fn decode(_: *Ctx, comptime _: Size, opcode: u16) @This() {
+            return .{ .n = int.extract(u3, opcode, n) };
+        }
+
+        pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
+            const addr = ctx.cpu.a[this.n];
+            ctx.cpu.a[this.n] +%= size.bits() / 8;
+            return ctx.read(size.Int(), addr);
+        }
+
+        pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
+            ctx.write(size.Int(), ctx.cpu.a[this.n], data);
+        }
+
+        pub fn Disasm(comptime _: Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    try writer.print("(a{})+", .{int.extract(u3, this.opcode, n)});
                 }
             };
         }

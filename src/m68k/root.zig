@@ -493,4 +493,14 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Cmp,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+    
+    // Compare address operand to registers or memory
+    isa.Instr{
+        .name = "cmpm",
+        .enc = .init("1011xxx1xx001xxx"),
+        .src = arg.PostInc(0),
+        .dst = arg.PostInc(9),
+        .op = op.Cmp,
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
 });
