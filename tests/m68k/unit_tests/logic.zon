@@ -204,14 +204,25 @@
         },
         .{
             .env = .{
-                .code = .{0x0A00, 0xFFFF},
-                .data = .{ 0xAAAA },
+                .code = .{ 0x0A00, 0xFFFF },
+                .data = .{0xAAAA},
             },
             .expect = .{
                 .disasm = "eori.b #$ff,d0",
                 .clk = 8,
-                .data = .{ 0xAA55 },
+                .data = .{0xAA55},
                 .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0A3C, 0xFFFF },
+                .flags = .{ .c = false, .v = true, .z = false, .n = true, .x = false },
+            },
+            .expect = .{
+                .disasm = "eori.b #$ff,ccr",
+                .clk = 20,
+                .flags = .{ .c = true, .v = false, .z = true, .n = false, .x = true },
             },
         },
     },
