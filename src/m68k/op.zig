@@ -335,6 +335,14 @@ pub const Jmp = struct {
     }
 };
 
+/// Jump to subroutine
+pub const Jsr = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, dst: u32) void {
+        ctx.push(u32, ctx.cpu.pc);
+        ctx.cpu.pc = dst;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

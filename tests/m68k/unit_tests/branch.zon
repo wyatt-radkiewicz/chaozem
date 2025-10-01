@@ -112,13 +112,26 @@
         // Jump to location (pc relative)
         .{
             .env = .{
-                .code = .{0x4EFB, 0x0008},
+                .code = .{ 0x4EFB, 0x0008 },
                 .data = .{2},
             },
             .expect = .{
                 .disasm = "jmp (#8,pc,d0.w)",
                 .pc = 12,
                 .clk = 14,
+            },
+        },
+        // Jump to subroutine (address indirect)
+        .{
+            .env = .{
+                .code = .{0x4E90},
+                .addr = .{0x200},
+            },
+            .expect = .{
+                .disasm = "jsr (a0)",
+                .pc = 0x100,
+                .stack = .{ 0x0000, 0x0102 },
+                .clk = 16,
             },
         },
     },

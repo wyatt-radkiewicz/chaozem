@@ -623,4 +623,20 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Jmp,
         .size = .{ .fixed = .none },
     },
+    
+    // Jump to subroutine
+    isa.Instr{
+        .name = "jsr",
+        .enc = .init("0100111010xxxxxx"),
+        .dst = arg.Addr(3, 0, .{ .none = .initDefault(0, .{
+            .indirect = 4,
+            .abs_word = 2,
+            .addr_disp = 2,
+            .pc_disp = 2,
+            .addr_idx = 4,
+            .pc_idx = 4,
+        }) }),
+        .op = op.Jsr,
+        .size = .{ .fixed = .none },
+    },
 });
