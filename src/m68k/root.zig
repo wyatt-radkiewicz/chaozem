@@ -590,4 +590,13 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Exg(.data, .addr),
         .size = .{ .fixed = .l },
     },
+    
+    // Sign extend
+    isa.Instr{
+        .name = "ext",
+        .enc = .init("010010001x000xxx"),
+        .dst = arg.RegIdx(.data, 0),
+        .op = op.Ext,
+        .size = .{ .dyn = .{ .at = 6, .w = 0, .l = 1 } },
+    },
 });

@@ -298,6 +298,29 @@ pub fn Exg(comptime src_reg: enum { data, addr }, comptime dst_reg: enum { data,
     };
 }
 
+/// Extend data register
+pub const Ext = struct {
+    pub fn op(ctx: *Ctx, comptime size: Size, dst: u3) void {
+        ctx.cpu.sr.v = false;
+        ctx.cpu.sr.c = false;
+        switch (size) {
+            .b, .none => unreachable,
+            .w => {
+                const res = int.extend(u16, @as(u8, @truncate(ctx.cpu.d[dst])));
+                ctx.cpu.d[dst] = int.overwrite(ctx.cpu.d[dst], res);
+                ctx.cpu.sr.n = int.negative(res);
+                ctx.cpu.sr.z = res == 0;
+            },
+            .l => {
+                const res = int.extend(u32, @as(u16, @truncate(ctx.cpu.d[dst])));
+                ctx.cpu.d[dst] = res;
+                ctx.cpu.sr.n = int.negative(res);
+                ctx.cpu.sr.z = res == 0;
+            },
+        }
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

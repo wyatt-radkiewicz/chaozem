@@ -66,14 +66,50 @@
         .{
             .env = .{
                 .code = .{0xC188},
-                .data = .{ 1 },
-                .addr = .{ 2 },
+                .data = .{1},
+                .addr = .{2},
             },
             .expect = .{
                 .disasm = "exg.l d0,a0",
-                .data = .{ 2 },
-                .addr = .{ 1 },
+                .data = .{2},
+                .addr = .{1},
                 .clk = 6,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4880},
+                .data = .{0xFF00},
+            },
+            .expect = .{
+                .disasm = "ext.w d0",
+                .data = .{0x0000},
+                .flags = .{ .c = false, .v = false, .n = false, .z = true },
+                .clk = 4,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4880},
+                .data = .{0x0080},
+            },
+            .expect = .{
+                .disasm = "ext.w d0",
+                .data = .{0xFF80},
+                .flags = .{ .c = false, .v = false, .n = true, .z = false },
+                .clk = 4,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x48C0},
+                .data = .{0xFFFF0F00},
+            },
+            .expect = .{
+                .disasm = "ext.l d0",
+                .data = .{0x00000F00},
+                .flags = .{ .c = false, .v = false, .n = false, .z = false },
+                .clk = 4,
             },
         },
     },
