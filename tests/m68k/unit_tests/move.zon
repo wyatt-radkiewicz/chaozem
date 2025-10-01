@@ -1,0 +1,16 @@
+.{
+    .vectors = .{},
+    .tests = .{
+        .{
+            .env = .{
+                .code = .{0x43D0},
+                .addr = .{ 10, 0 },
+            },
+            .expect = .{
+                .disasm = "lea.l (a0),a1",
+                .clk = 4,
+                .addr = .{ 10, 10 },
+            },
+        },
+    },
+}

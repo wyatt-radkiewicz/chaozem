@@ -623,7 +623,7 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Jmp,
         .size = .{ .fixed = .none },
     },
-    
+
     // Jump to subroutine
     isa.Instr{
         .name = "jsr",
@@ -638,5 +638,14 @@ const m68k_isa = isa.Isa(&.{
         }) }),
         .op = op.Jsr,
         .size = .{ .fixed = .none },
+    },
+
+    // Load effective address
+    isa.Instr{
+        .name = "lea",
+        .enc = .init("0100xxx111xxxxxx"),
+        .src = arg.Addr(3, 0, .{ .none = .initDefault(0, .{ .addr_idx = 2, .pc_idx = 2 }) }),
+        .dst = arg.AddrReg(9),
+        .size = .{ .fixed = .l },
     },
 });
