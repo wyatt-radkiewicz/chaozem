@@ -545,4 +545,23 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Logic(.eor),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Exclusive or immediate
+    isa.Instr{
+        .name = "eori",
+        .enc = .init("00001010xx111100"),
+        .src = arg.Imm(null, .{}),
+        .dst = arg.Status,
+        .op = op.Logic(.eor),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
+        .clk = 12,
+    },
+    isa.Instr{
+        .name = "eori",
+        .enc = .init("00001010xxxxxxxx"),
+        .src = arg.Imm(null, .{}),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
+        .op = op.Logic(.eor),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
 });

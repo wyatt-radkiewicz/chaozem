@@ -202,5 +202,17 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x0A00, 0xFFFF},
+                .data = .{ 0xAAAA },
+            },
+            .expect = .{
+                .disasm = "eori.b #$ff,d0",
+                .clk = 8,
+                .data = .{ 0xAA55 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
     },
 }
