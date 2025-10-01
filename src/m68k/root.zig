@@ -154,7 +154,7 @@ const m68k_isa = isa.Isa(&.{
             .immediate = 4,
         }) }),
         .dst = arg.DataReg(null, 9),
-        .op = op.And,
+        .op = op.Logic(.@"and"),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -162,7 +162,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1100xxx1xxxxxxxx"),
         .src = arg.DataReg(null, 9),
         .dst = arg.Ea(3, 0, .{}),
-        .op = op.And,
+        .op = op.Logic(.@"and"),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
 
@@ -172,7 +172,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("00000010xx111100"),
         .src = arg.Imm(null, .{}),
         .dst = arg.Status,
-        .op = op.And,
+        .op = op.Logic(.@"and"),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
         .clk = 12,
     },
@@ -181,7 +181,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("00000010xxxxxxxx"),
         .src = arg.Imm(null, .{}),
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
-        .op = op.And,
+        .op = op.Logic(.@"and"),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
 
@@ -525,7 +525,7 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Div(.signed),
         .size = .{ .fixed = .w },
     },
-    
+
     // Unsigned divide
     isa.Instr{
         .name = "divu",
@@ -534,5 +534,15 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.DataReg(.l, 9),
         .op = op.Div(.unsigned),
         .size = .{ .fixed = .w },
+    },
+
+    // Exclusive or
+    isa.Instr{
+        .name = "eor",
+        .enc = .init("1011xxx1xxxxxxxx"),
+        .src = arg.DataReg(null, 9),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
+        .op = op.Logic(.eor),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
 });

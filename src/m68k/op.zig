@@ -49,15 +49,22 @@ pub const Addx = struct {
     }
 };
 
-/// Bitwise and
-pub const And = struct {
-    pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
-        const result = src & dst;
-        ctx.cpu.sr.n = int.negative(result);
-        ctx.cpu.sr.z = result == 0;
-        return result;
-    }
-};
+/// Bitwise logical operation
+pub fn Logic(comptime mode: enum { @"and", eor }) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
+            const result = switch (mode) {
+                .@"and" => dst & src,
+                .eor => dst ^ src,
+            };
+            ctx.cpu.sr.n = int.negative(result);
+            ctx.cpu.sr.z = result == 0;
+            ctx.cpu.sr.v = false;
+            ctx.cpu.sr.c = false;
+            return result;
+        }
+    };
+}
 
 /// Arithmatic shift
 pub fn Asd(comptime add_cycles: bool, comptime dir: enum { r, l }) type {

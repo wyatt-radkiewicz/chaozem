@@ -178,5 +178,29 @@
                 .flags = .{ .c = false, .v = false, .z = true, .n = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0xB340},
+                .data = .{ 0x0000FFFF, 0x00000F0F },
+            },
+            .expect = .{
+                .disasm = "eor.w d1,d0",
+                .clk = 4,
+                .data = .{ 0x0000F0F0, 0x00000F0F },
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xB380},
+                .data = .{ 0xFFFFFFFF, 0xF0F00F0F },
+            },
+            .expect = .{
+                .disasm = "eor.l d1,d0",
+                .clk = 8,
+                .data = .{ 0x0F0FF0F0, 0xF0F00F0F },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
     },
 }
