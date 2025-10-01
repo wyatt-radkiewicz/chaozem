@@ -278,7 +278,7 @@
             },
             .expect = .{
                 .disasm = "divs.w d1,d0",
-                .clk = 158,
+                .clk = 150,
                 .data = .{ 0x00000000, 0xFFFF0001 },
                 .flags = .{ .c = false, .v = false, .z = true, .n = false, .x = false },
             },
@@ -305,6 +305,18 @@
                 .clk = 18,
                 .data = .{0x80000000},
                 .flags = .{ .c = false, .v = true, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x80C1},
+                .data = .{ 0x00000000, 0xFFFF0001 },
+            },
+            .expect = .{
+                .disasm = "divu.w d1,d0",
+                .clk = 102,
+                .data = .{ 0x00000000, 0xFFFF0001 },
+                .flags = .{ .c = false, .v = false, .z = true, .n = false, .x = false },
             },
         },
     },

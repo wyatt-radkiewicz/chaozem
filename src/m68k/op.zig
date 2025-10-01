@@ -200,49 +200,80 @@ pub const Dbcc = struct {
     }
 };
 
-/// Signed divide operation
-pub const Divs = struct {
-    pub fn op(ctx: *Ctx, comptime _: Size, src: u16, dst: u32) u32 {
-        // Get the numerator and denominator
-        const num: i32 = @bitCast(dst);
-        const den: i32 = int.castsign(.signed, src);
-        switch (std.math.sign(den)) {
-            -1 => ctx.clk += 14,
-            0 => {
+/// Signed and unsigned divide operation
+pub fn Div(comptime sign: std.builtin.Signedness) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime _: Size, src: u16, dst: u32) u32 {
+            // Get the numerator and denominator
+            const result_num: std.meta.Int(sign, 32) = @bitCast(dst);
+            const result_den: std.meta.Int(sign, 32) = int.castsign(sign, src);
+            if (result_den == 0) {
                 ctx.clk += 4;
                 Ctx.Vector.divzero.handle(ctx);
                 return dst;
-            },
-            1 => ctx.clk += 12,
-            else => unreachable,
+            }
+            ctx.clk += switch (sign) {
+                .signed => 12 + @as(usize, @intFromBool(result_den < 0)) * 2,
+                .unsigned => 2,
+            };
+
+            // Compute the division and check for overflow
+            ctx.cpu.sr.c = false;
+            ctx.cpu.sr.v = false;
+            const result_quo = std.math.cast(i16, @divTrunc(result_num, result_den)) orelse {
+                ctx.cpu.sr.v = true;
+                return dst;
+            };
+            const result_rem = std.math.cast(i16, @rem(result_num, result_den)) orelse {
+                ctx.cpu.sr.v = true;
+                return dst;
+            };
+            ctx.cpu.sr.n = int.negative(result_quo);
+            ctx.cpu.sr.z = result_quo == 0;
+
+            // Calculate the cycle count
+            switch (sign) {
+                .signed => {
+                    ctx.clk += 12;
+                    if (result_num < 0) {
+                        ctx.clk += 4;
+                    } else {
+                        ctx.clk += if (result_den < 0) @as(usize, 6) else @as(usize, 2);
+                    }
+
+                    var quo: u16 = @bitCast(result_quo);
+                    for (0..15) |_| {
+                        quo <<= 1;
+                        ctx.clk += 6 + @as(usize, ~@as(u1, @truncate(quo >> 15))) * 2;
+                    }
+                },
+                .unsigned => {
+                    var num: u32 = @as(u32, @bitCast(result_num));
+                    var msb: u2 = @as(u1, @truncate(num >> 31));
+                    ctx.clk += 6;
+                    for (0..15) |_| {
+                        // Calculate clock cycles
+                        if (msb & 1 != 0) {
+                            ctx.clk += 4;
+                        } else {
+                            ctx.clk += 6 + if (msb & 2 != 0) @as(usize, 2) else @as(usize, 0);
+                        }
+
+                        // Shift numbers
+                        msb = msb << 1 | @as(u1, @truncate(num >> 31));
+                        num <<= 1;
+                        if (num >> 16 > result_den) {
+                            num -= result_den << 16;
+                        }
+                    }
+                },
+            }
+
+            // Return the packed results
+            return @as(u32, @as(u16, @bitCast(result_rem))) << 16 | @as(u16, @bitCast(result_quo));
         }
-
-        // Compute the division and check for overflow
-        ctx.cpu.sr.c = false;
-        ctx.cpu.sr.v = false;
-        const quo = std.math.cast(i16, @divTrunc(num, den)) orelse {
-            ctx.cpu.sr.v = true;
-            return dst;
-        };
-        const rem = std.math.cast(i16, @rem(num, den)) orelse {
-            ctx.cpu.sr.v = true;
-            return dst;
-        };
-        ctx.cpu.sr.n = int.negative(quo);
-        ctx.cpu.sr.z = quo == 0;
-
-        // Calculate the cycle count
-        var clk: u16 = @bitCast(quo);
-        ctx.clk += 12 + if (num < 0) @as(u8, 4) else if (den < 0) @as(u8, 6) else @as(u8, 2);
-        for (0..16) |_| {
-            ctx.clk += 6 + @as(usize, ~@as(u1, @truncate(clk >> 15))) * 2;
-            clk <<= 1;
-        }
-
-        // Return the packed results
-        return @as(u32, @as(u16, @bitCast(rem))) << 16 | @as(u16, @bitCast(quo));
-    }
-};
+    };
+}
 
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {

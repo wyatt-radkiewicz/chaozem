@@ -522,7 +522,17 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1000xxx111xxxxxx"),
         .src = arg.Ea(3, 0, .{}),
         .dst = arg.DataReg(.l, 9),
-        .op = op.Divs,
+        .op = op.Div(.signed),
+        .size = .{ .fixed = .w },
+    },
+    
+    // Unsigned divide
+    isa.Instr{
+        .name = "divu",
+        .enc = .init("1000xxx011xxxxxx"),
+        .src = arg.Ea(3, 0, .{}),
+        .dst = arg.DataReg(.l, 9),
+        .op = op.Div(.unsigned),
         .size = .{ .fixed = .w },
     },
 });
