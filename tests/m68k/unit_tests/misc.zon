@@ -41,5 +41,40 @@
                 .flags = .{ .n = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0xC141},
+                .data = .{ 1, 2 },
+            },
+            .expect = .{
+                .disasm = "exg.l d0,d1",
+                .data = .{ 2, 1 },
+                .clk = 6,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xC149},
+                .addr = .{ 1, 2 },
+            },
+            .expect = .{
+                .disasm = "exg.l a0,a1",
+                .addr = .{ 2, 1 },
+                .clk = 6,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xC188},
+                .data = .{ 1 },
+                .addr = .{ 2 },
+            },
+            .expect = .{
+                .disasm = "exg.l d0,a0",
+                .data = .{ 2 },
+                .addr = .{ 1 },
+                .clk = 6,
+            },
+        },
     },
 }

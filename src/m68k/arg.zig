@@ -6,23 +6,19 @@ const Ctx = @import("Ctx.zig");
 const Size = Ctx.Size;
 
 /// Data register source or
-pub fn DataReg(override: ?Size, n: u4) type {
+pub fn DataReg(n: u4) type {
     return struct {
         n: u3,
-
-        fn Sz(comptime size: Size) Size {
-            return override orelse size;
-        }
 
         pub fn decode(_: *Ctx, comptime _: Size, opcode: u16) @This() {
             return .{ .n = int.extract(u3, opcode, n) };
         }
 
-        pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) Sz(size).Int() {
+        pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
             return @truncate(ctx.cpu.d[this.n]);
         }
 
-        pub fn store(this: @This(), ctx: *Ctx, comptime s: Size, _: u16, data: Sz(s).Int()) void {
+        pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
             ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], data);
         }
 
@@ -169,6 +165,42 @@ pub fn Imm(comptime Override: ?type, comptime fmt: FormatOptions) type {
                             17...32 => this.reader.takeInt(u32, .big) catch return err,
                         }),
                     )), .options = fmt }});
+                }
+            };
+        }
+    };
+}
+
+/// Represents a register index
+pub fn RegIdx(comptime reg_type: enum { data, addr }, at: u4) type {
+    return struct {
+        n: u3,
+
+        pub fn decode(_: *Ctx, comptime _: Size, opcode: u16) @This() {
+            return .{ .n = int.extract(u3, opcode, at) };
+        }
+
+        pub fn load(this: @This(), _: *Ctx, comptime _: Size, _: u16) u3 {
+            return this.n;
+        }
+
+        pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
+            switch (reg_type) {
+                .data => ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], data),
+                .addr => ctx.cpu.a[this.n] = int.overwrite(ctx.cpu.a[this.n], data),
+            }
+        }
+
+        pub fn Disasm(comptime _: Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    try writer.print("{c}{}", .{ switch (reg_type) {
+                        .data => @as(u8, 'd'),
+                        .addr => @as(u8, 'a'),
+                    }, int.extract(u3, this.opcode, at) });
                 }
             };
         }
