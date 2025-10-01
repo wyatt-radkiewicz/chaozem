@@ -321,6 +321,13 @@ pub const Ext = struct {
     }
 };
 
+/// Run illegal instruction handler
+pub const Illegal = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size) void {
+        Ctx.Vector.illegal.handle(ctx);
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

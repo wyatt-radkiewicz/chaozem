@@ -112,5 +112,15 @@
                 .clk = 4,
             },
         },
+        .{
+            .env = .{
+                .code = .{0x4AFC},
+            },
+            .expect = .{
+                .disasm = "illegal",
+                .pc = 0x100,
+                .clk = 34,
+            },
+        },
     },
 }

@@ -259,7 +259,7 @@ pub const Vector = enum(u5) {
     /// Handle exception
     pub fn handle(this: @This(), ctx: *Ctx) void {
         switch (this) {
-            .illegal => Group.@"1".handle(this, ctx, 14),
+            .illegal => Group.@"1".handle(this, ctx, 10),
             .divzero => Group.@"2".handle(this, ctx, 8),
             .chk => Group.@"2".handle(this, ctx, 12),
             else => {},
