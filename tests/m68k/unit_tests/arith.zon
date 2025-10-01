@@ -295,5 +295,17 @@
                 .flags = .{ .c = false, .v = true, .z = false, .n = false, .x = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x81C3},
+                .data = .{ 0x80000000, 0, 0, 0x8000 },
+            },
+            .expect = .{
+                .disasm = "divs.w d3,d0",
+                .clk = 18,
+                .data = .{0x80000000},
+                .flags = .{ .c = false, .v = true, .z = false, .n = false, .x = false },
+            },
+        },
     },
 }
