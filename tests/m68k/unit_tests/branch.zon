@@ -109,5 +109,17 @@
                 .clk = 12,
             },
         },
+        // Jump to location (pc relative)
+        .{
+            .env = .{
+                .code = .{0x4EFB, 0x0008},
+                .data = .{2},
+            },
+            .expect = .{
+                .disasm = "jmp (#8,pc,d0.w)",
+                .pc = 12,
+                .clk = 14,
+            },
+        },
     },
 }

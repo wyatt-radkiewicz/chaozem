@@ -326,6 +326,7 @@ pub fn RegReg(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type 
 
 /// Effective address clock delays
 pub const EaDelay = struct {
+    none: std.EnumArray(Ctx.Mode, usize) = .initFill(0),
     b: std.EnumArray(Ctx.Mode, usize) = .initFill(0),
     w: std.EnumArray(Ctx.Mode, usize) = .initFill(0),
     l: std.EnumArray(Ctx.Mode, usize) = .initFill(0),
@@ -375,6 +376,40 @@ pub fn Ea(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     const reg = int.extract(u3, this.opcode, n);
                     try writer.print("{f}", .{Ctx.Mode.Disasm(size){
+                        .reader = this.reader,
+                        .mode = Ctx.Mode.decode(int.extract(u3, this.opcode, m), reg),
+                        .reg = reg,
+                    }});
+                }
+            };
+        }
+    };
+}
+
+/// This will get the address of an effective addressing mode
+pub fn Addr(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
+    return struct {
+        pub fn decode(_: *Ctx, comptime _: Size, _: u16) @This() {
+            return .{};
+        }
+
+        pub fn load(_: @This(), ctx: *Ctx, comptime size: Size, opcode: u16) u32 {
+            const reg = int.extract(u3, opcode, n);
+            const mode = Ctx.Mode.decode(int.extract(u3, opcode, m), reg);
+            ctx.clk += delay.delay(size, mode);
+            return mode.calc(ctx, .none, reg);
+        }
+
+        pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: void) void {}
+
+        pub fn Disasm(comptime _: Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    const reg = int.extract(u3, this.opcode, n);
+                    try writer.print("{f}", .{Ctx.Mode.Disasm(.none){
                         .reader = this.reader,
                         .mode = Ctx.Mode.decode(int.extract(u3, this.opcode, m), reg),
                         .reg = reg,

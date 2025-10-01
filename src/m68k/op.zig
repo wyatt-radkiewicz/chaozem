@@ -328,6 +328,13 @@ pub const Illegal = struct {
     }
 };
 
+/// Jump to address
+pub const Jmp = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, dst: u32) void {
+        ctx.cpu.pc = dst;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {
