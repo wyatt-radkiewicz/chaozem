@@ -6,19 +6,23 @@ const Ctx = @import("Ctx.zig");
 const Size = Ctx.Size;
 
 /// Data register source or
-pub fn DataReg(n: u4) type {
+pub fn DataReg(override: ?Size, n: u4) type {
     return struct {
         n: u3,
+
+        fn Sz(comptime size: Size) Size {
+            return override orelse size;
+        }
 
         pub fn decode(_: *Ctx, comptime _: Size, opcode: u16) @This() {
             return .{ .n = int.extract(u3, opcode, n) };
         }
 
-        pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
+        pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) Sz(size).Int() {
             return @truncate(ctx.cpu.d[this.n]);
         }
 
-        pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
+        pub fn store(this: @This(), ctx: *Ctx, comptime s: Size, _: u16, data: Sz(s).Int()) void {
             ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], data);
         }
 

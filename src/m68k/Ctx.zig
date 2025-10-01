@@ -247,6 +247,7 @@ pub const Vector = enum(u5) {
     reset_sp = 0,
     reset_pc = 1,
     illegal = 4,
+    divzero = 5,
     chk = 6,
     _,
 
@@ -259,6 +260,7 @@ pub const Vector = enum(u5) {
     pub fn handle(this: @This(), ctx: *Ctx) void {
         switch (this) {
             .illegal => Group.@"1".handle(this, ctx, 14),
+            .divzero => Group.@"2".handle(this, ctx, 8),
             .chk => Group.@"2".handle(this, ctx, 12),
             else => {},
         }

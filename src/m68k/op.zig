@@ -200,6 +200,50 @@ pub const Dbcc = struct {
     }
 };
 
+/// Signed divide operation
+pub const Divs = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, src: u16, dst: u32) u32 {
+        // Get the numerator and denominator
+        const num: i32 = @bitCast(dst);
+        const den: i32 = int.castsign(.signed, src);
+        switch (std.math.sign(den)) {
+            -1 => ctx.clk += 14,
+            0 => {
+                ctx.clk += 4;
+                Ctx.Vector.divzero.handle(ctx);
+                return dst;
+            },
+            1 => ctx.clk += 12,
+            else => unreachable,
+        }
+
+        // Compute the division and check for overflow
+        ctx.cpu.sr.c = false;
+        ctx.cpu.sr.v = false;
+        const quo = std.math.cast(i16, @divTrunc(num, den)) orelse {
+            ctx.cpu.sr.v = true;
+            return dst;
+        };
+        const rem = std.math.cast(i16, @rem(num, den)) orelse {
+            ctx.cpu.sr.v = true;
+            return dst;
+        };
+        ctx.cpu.sr.n = int.negative(quo);
+        ctx.cpu.sr.z = quo == 0;
+
+        // Calculate the cycle count
+        var clk: u16 = @bitCast(quo);
+        ctx.clk += 12 + if (num < 0) @as(u8, 4) else if (den < 0) @as(u8, 6) else @as(u8, 2);
+        for (0..16) |_| {
+            ctx.clk += 6 + @as(usize, ~@as(u1, @truncate(clk >> 15))) * 2;
+            clk <<= 1;
+        }
+
+        // Return the packed results
+        return @as(u32, @as(u16, @bitCast(rem))) << 16 | @as(u16, @bitCast(quo));
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

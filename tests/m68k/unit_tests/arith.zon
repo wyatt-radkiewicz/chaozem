@@ -1,5 +1,7 @@
 .{
-    .vectors = .{},
+    .vectors = .{
+        .divzero = 0x200,
+    },
     .tests = .{
         .{
             .env = .{
@@ -254,6 +256,43 @@
                 .clk = 8,
                 .addr = .{ 0x3000, 0x2000 },
                 .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x81C1},
+                .data = .{ 0xFFFF0000, 0xFFFF0000 },
+            },
+            .expect = .{
+                .disasm = "divs.w d1,d0",
+                .clk = 36,
+                .pc = 0x100,
+                .data = .{ 0xFFFF0000, 0xFFFF0000 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x81C1},
+                .data = .{ 0x00000000, 0xFFFF0001 },
+            },
+            .expect = .{
+                .disasm = "divs.w d1,d0",
+                .clk = 158,
+                .data = .{ 0x00000000, 0xFFFF0001 },
+                .flags = .{ .c = false, .v = false, .z = true, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x81C2},
+                .data = .{ 0x7FFFFFFF, 0, 1 },
+            },
+            .expect = .{
+                .disasm = "divs.w d2,d0",
+                .clk = 16,
+                .data = .{0x7FFFFFFF},
+                .flags = .{ .c = false, .v = true, .z = false, .n = false, .x = false },
             },
         },
     },

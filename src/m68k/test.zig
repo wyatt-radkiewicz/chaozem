@@ -91,6 +91,7 @@ const Test = struct {
 const Vectors = struct {
     reset_sp: u32 = 0x2000,
     reset_pc: u32 = 0x100,
+    divzero: u32 = 0x100,
     chk: u32 = 0x100,
 };
 
