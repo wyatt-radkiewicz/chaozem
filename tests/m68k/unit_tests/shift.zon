@@ -109,5 +109,33 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = true, .x = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0xE3D0},
+                .addr = .{0x1000},
+                .ram = .{0x8111},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "lsl.w (a0)",
+                .clk = 12,
+                .addr = .{0x1000},
+                .ram = .{0x0222},
+                .flags = .{ .c = true, .v = false, .z = false, .n = false, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xE648},
+                .data = .{0xF00F},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "lsr.w #3,d0",
+                .clk = 12,
+                .data = .{0x1E01},
+                .flags = .{ .c = true, .v = false, .z = false, .n = false, .x = true },
+            },
+        },
     },
 }

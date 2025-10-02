@@ -191,7 +191,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110000111xxxxxx"),
         .src = arg.Const(u4, 1),
         .dst = arg.Ea(3, 0, .{}),
-        .op = op.Asd(false, .l),
+        .op = op.Shift(false, .al),
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst },
     },
@@ -200,7 +200,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110xxx1xx000xxx"),
         .src = arg.Opcode(u3, 9),
         .dst = arg.DataReg(0),
-        .op = op.Asd(true, .l),
+        .op = op.Shift(true, .al),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -208,7 +208,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110xxx1xx100xxx"),
         .src = arg.DataReg(9),
         .dst = arg.DataReg(0),
-        .op = op.Asd(true, .l),
+        .op = op.Shift(true, .al),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
 
@@ -218,7 +218,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110000011xxxxxx"),
         .src = arg.Const(u4, 1),
         .dst = arg.Ea(3, 0, .{}),
-        .op = op.Asd(false, .r),
+        .op = op.Shift(false, .ar),
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst },
     },
@@ -227,7 +227,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110xxx0xx000xxx"),
         .src = arg.Opcode(u3, 9),
         .dst = arg.DataReg(0),
-        .op = op.Asd(true, .r),
+        .op = op.Shift(true, .ar),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
     isa.Instr{
@@ -235,7 +235,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("1110xxx0xx100xxx"),
         .src = arg.DataReg(9),
         .dst = arg.DataReg(0),
-        .op = op.Asd(true, .r),
+        .op = op.Shift(true, .ar),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
 
@@ -658,5 +658,59 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Link,
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst, .comma, .src },
+    },
+    
+    // Logical shift left
+    isa.Instr{
+        .name = "lsl",
+        .enc = .init("1110001111xxxxxx"),
+        .src = arg.Const(u4, 1),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Shift(false, .ll),
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "lsl",
+        .enc = .init("1110xxx1xx001xxx"),
+        .src = arg.Opcode(u3, 9),
+        .dst = arg.DataReg(0),
+        .op = op.Shift(true, .ll),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    isa.Instr{
+        .name = "lsl",
+        .enc = .init("1110xxx1xx101xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.DataReg(0),
+        .op = op.Shift(true, .ll),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+
+    // Logical shift right
+    isa.Instr{
+        .name = "lsr",
+        .enc = .init("1110001011xxxxxx"),
+        .src = arg.Const(u4, 1),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Shift(false, .lr),
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "lsr",
+        .enc = .init("1110xxx0xx001xxx"),
+        .src = arg.Opcode(u3, 9),
+        .dst = arg.DataReg(0),
+        .op = op.Shift(true, .lr),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    isa.Instr{
+        .name = "lsr",
+        .enc = .init("1110xxx0xx101xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.DataReg(0),
+        .op = op.Shift(true, .lr),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
 });

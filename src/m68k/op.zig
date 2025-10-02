@@ -66,32 +66,56 @@ pub fn Logic(comptime mode: enum { @"and", eor }) type {
     };
 }
 
-/// Arithmatic shift
-pub fn Asd(comptime add_cycles: bool, comptime dir: enum { r, l }) type {
+/// Arithmatic and logical shifts
+pub fn Shift(comptime add_cycles: bool, comptime dir: enum { ar, al, lr, ll }) type {
     return struct {
-        pub fn op(ctx: *Ctx, comptime size: Size, src: anytype, dst: size.Int()) size.Int() {
-            const Full = std.meta.Int(.unsigned, size.bits() + 64);
-            const shift: u6 = if (@bitSizeOf(@TypeOf(src)) <= 6) src else @truncate(src);
-            const full: Full = switch (dir) {
-                .l => @as(Full, dst) << shift,
-                .r => @bitCast(int.castsign(.signed, @as(Full, dst) << 64) >> shift),
-            };
-            const result: size.Int() = @truncate(full >> if (dir == .r) 64 else 0);
-            ctx.clk += (@as(usize, shift) * 2 + (size.bits() / 16) * 2) * @intFromBool(add_cycles);
+        pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
+            // Calculate the base clock cycles of the operation
+            if (add_cycles) {
+                ctx.clk += if (size.bits() > 16) @as(usize, 4) else @as(usize, 2);
+            }
 
-            const last_bit = if (dir == .r) 63 else size.bits();
-            ctx.cpu.sr.x = if (shift == 0) ctx.cpu.sr.x else int.extract(bool, full, last_bit);
+            // Initialize the overflow flag
+            ctx.cpu.sr.v = false;
+
+            // Create the shfit results
+            var last: ?bool = null;
+            var result = int.castsign(switch (dir) {
+                .al, .ar => .signed,
+                .ll, .lr => .unsigned,
+            }, dst);
+
+            // Shift out each bit
+            for (0..src & 64 - 1) |_| {
+                last = switch (dir) {
+                    .al, .ll => l: {
+                        const msb = int.negative(result);
+                        result <<= 1;
+                        if (dir == .al and msb != last orelse msb) {
+                            ctx.cpu.sr.v = true;
+                        }
+                        break :l msb;
+                    },
+                    .ar, .lr => r: {
+                        const lsb = result & 1 == 1;
+                        result >>= 1;
+                        break :r lsb;
+                    },
+                };
+                if (add_cycles) {
+                    ctx.clk += 2;
+                }
+            }
+
+            // Update the flags and return
+            if (dir == .al and int.negative(result) != last orelse int.negative(result)) {
+                ctx.cpu.sr.v = true;
+            }
+            ctx.cpu.sr.x = last orelse ctx.cpu.sr.x;
             ctx.cpu.sr.n = int.negative(result);
             ctx.cpu.sr.z = result == 0;
-            ctx.cpu.sr.v = switch (dir) {
-                .r => false,
-                .l => v: {
-                    const shifted = full >> size.bits() - 1;
-                    break :v shifted != 0 and shifted != (@as(Full, 2) << shift) - 1;
-                },
-            };
-            ctx.cpu.sr.c = int.extract(bool, full, last_bit);
-            return result;
+            ctx.cpu.sr.c = last orelse false;
+            return @bitCast(result);
         }
     };
 }

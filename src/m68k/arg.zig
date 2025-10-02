@@ -173,7 +173,7 @@ pub const BitIdx = struct {
         return .{};
     }
 
-    pub fn load(_: @This(), ctx: *Ctx, comptime size: Size, _: u16) std.math.Log2Int(size.Int()) {
+    pub fn load(_: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
         return ctx.fetch(std.math.Log2Int(size.Int()));
     }
 
