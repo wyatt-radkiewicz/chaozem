@@ -133,18 +133,14 @@ pub const Status = struct {
 };
 
 /// Immediate source data target
-pub fn Imm(comptime Override: ?type, comptime fmt: FormatOptions) type {
+pub fn Imm(comptime fmt: FormatOptions) type {
     return struct {
-        fn Data(comptime size: Size) type {
-            return Override orelse size.Int();
-        }
-
         pub fn decode(_: *Ctx, comptime _: Size, _: u16) @This() {
             return .{};
         }
 
-        pub fn load(_: @This(), ctx: *Ctx, comptime size: Size, _: u16) Data(size) {
-            return ctx.fetch(Data(size));
+        pub fn load(_: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
+            return ctx.fetch(size.Int());
         }
 
         pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: void) void {}
@@ -155,21 +151,48 @@ pub fn Imm(comptime Override: ?type, comptime fmt: FormatOptions) type {
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    const bits = @bitSizeOf(Data(size));
-                    const err = error.WriteFailed;
-                    try writer.print("{f}", .{Formatter(Data(size)){ .val = @bitCast(@as(
-                        std.meta.Int(.unsigned, bits),
-                        @truncate(switch (bits) {
-                            else => unreachable,
-                            0...16 => this.reader.takeInt(u16, .big) catch return err,
-                            17...32 => this.reader.takeInt(u32, .big) catch return err,
-                        }),
-                    )), .options = fmt }});
+                    const Data = std.meta.Int(if (fmt.hex) .unsigned else .signed, size.bits());
+                    const val: size.Int() = @truncate(switch (size) {
+                        else => unreachable,
+                        .b, .w => this.reader.takeInt(u16, .big) catch return error.WriteFailed,
+                        .l => this.reader.takeInt(u32, .big) catch return error.WriteFailed,
+                    });
+                    try writer.print("{f}", .{Formatter(Data){
+                        .val = @bitCast(val),
+                        .options = fmt,
+                    }});
                 }
             };
         }
     };
 }
+
+/// Bit index
+pub const BitIdx = struct {
+    pub fn decode(_: *Ctx, comptime _: Size, _: u16) @This() {
+        return .{};
+    }
+
+    pub fn load(_: @This(), ctx: *Ctx, comptime size: Size, _: u16) std.math.Log2Int(size.Int()) {
+        return ctx.fetch(std.math.Log2Int(size.Int()));
+    }
+
+    pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: void) void {}
+
+    pub fn Disasm(comptime size: Size) type {
+        return struct {
+            reader: *std.io.Reader,
+            opcode: u16,
+
+            pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                try writer.print("#{}", .{@as(
+                    std.math.Log2Int(size.Int()),
+                    @truncate(this.reader.takeInt(u16, .big) catch return error.WriteFailed),
+                )});
+            }
+        };
+    }
+};
 
 /// Represents a register index
 pub fn RegIdx(comptime reg_type: enum { data, addr }, at: u4) type {

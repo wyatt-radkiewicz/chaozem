@@ -101,7 +101,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "addi",
         .enc = .init("00000110xxxxxxxx"),
-        .src = arg.Imm(null, .{}),
+        .src = arg.Imm(.{}),
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = op.Add,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
@@ -170,7 +170,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "andi",
         .enc = .init("00000010xx111100"),
-        .src = arg.Imm(null, .{}),
+        .src = arg.Imm(.{}),
         .dst = arg.Status,
         .op = op.Logic(.@"and"),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
@@ -179,7 +179,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "andi",
         .enc = .init("00000010xxxxxxxx"),
-        .src = arg.Imm(null, .{}),
+        .src = arg.Imm(.{}),
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = op.Logic(.@"and"),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
@@ -253,7 +253,7 @@ const m68k_isa = isa.Isa(&.{
         .name = "b",
         .enc = .init("0110xxxx00000000"),
         .src = arg.Opcode(Ctx.Cond, 8),
-        .dst = arg.Imm(u16, .{ .hex = false }),
+        .dst = arg.Imm(.{ .hex = false }),
         .op = op.Branch,
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .src, .size, .space, .dst },
@@ -263,7 +263,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "bchg",
         .enc = .init("0000100001xxxxxx"),
-        .src = arg.Imm(u3, .{ .hex = false }),
+        .src = arg.BitIdx,
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Bit(.chg),
         .size = .{ .fixed = .b },
@@ -271,7 +271,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "bchg",
         .enc = .init("0000100001000xxx"),
-        .src = arg.Imm(u5, .{ .hex = false }),
+        .src = arg.BitIdx,
         .dst = arg.DataReg(0),
         .op = op.Bit(.chg),
         .size = .{ .fixed = .l },
@@ -299,7 +299,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "bclr",
         .enc = .init("0000100010xxxxxx"),
-        .src = arg.Imm(u3, .{ .hex = false }),
+        .src = arg.BitIdx,
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Bit(.clr),
         .size = .{ .fixed = .b },
@@ -307,7 +307,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "bclr",
         .enc = .init("0000100010000xxx"),
-        .src = arg.Imm(u5, .{ .hex = false }),
+        .src = arg.BitIdx,
         .dst = arg.DataReg(0),
         .op = op.Bit(.clr),
         .size = .{ .fixed = .l },
@@ -345,7 +345,7 @@ const m68k_isa = isa.Isa(&.{
         .name = "bra",
         .enc = .init("0110000000000000"),
         .src = arg.Const(Ctx.Cond, .t),
-        .dst = arg.Imm(u16, .{ .hex = false }),
+        .dst = arg.Imm(.{ .hex = false }),
         .op = op.Branch,
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst },
@@ -355,7 +355,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "bset",
         .enc = .init("0000100011xxxxxx"),
-        .src = arg.Imm(u3, .{ .hex = false }),
+        .src = arg.BitIdx,
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Bit(.set),
         .size = .{ .fixed = .b },
@@ -363,7 +363,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "bset",
         .enc = .init("0000100011000xxx"),
-        .src = arg.Imm(u5, .{ .hex = false }),
+        .src = arg.BitIdx,
         .dst = arg.DataReg(0),
         .op = op.Bit(.set),
         .size = .{ .fixed = .l },
@@ -401,7 +401,7 @@ const m68k_isa = isa.Isa(&.{
         .name = "bsr",
         .enc = .init("0110000100000000"),
         .src = arg.Const(Ctx.Cond, .f),
-        .dst = arg.Imm(u16, .{ .hex = false }),
+        .dst = arg.Imm(.{ .hex = false }),
         .op = op.Branch,
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst },
@@ -411,7 +411,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "btst",
         .enc = .init("0000100000xxxxxx"),
-        .src = arg.Imm(u3, .{ .hex = false }),
+        .src = arg.BitIdx,
         .dst = arg.Ea(3, 0, .{}),
         .op = op.Bit(.tst),
         .size = .{ .fixed = .b },
@@ -419,7 +419,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "btst",
         .enc = .init("0000100000000xxx"),
-        .src = arg.Imm(u5, .{ .hex = false }),
+        .src = arg.BitIdx,
         .dst = arg.DataReg(0),
         .op = op.Bit(.tst),
         .size = .{ .fixed = .l },
@@ -488,7 +488,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "cmpi",
         .enc = .init("00001100xxxxxxxx"),
-        .src = arg.Imm(null, .{}),
+        .src = arg.Imm(.{}),
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(2, .{}) }),
         .op = op.Cmp,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
@@ -509,7 +509,7 @@ const m68k_isa = isa.Isa(&.{
         .name = "db",
         .enc = .init("0101xxxx11001xxx"),
         .ctx = arg.Opcode(Ctx.Cond, 8),
-        .src = arg.Imm(null, .{ .hex = false }),
+        .src = arg.Imm(.{ .hex = false }),
         .dst = arg.DataReg(0),
         .op = op.Dbcc,
         .size = .{ .fixed = .w },
@@ -550,7 +550,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "eori",
         .enc = .init("00001010xx111100"),
-        .src = arg.Imm(null, .{}),
+        .src = arg.Imm(.{}),
         .dst = arg.Status,
         .op = op.Logic(.eor),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
@@ -559,7 +559,7 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "eori",
         .enc = .init("00001010xxxxxxxx"),
-        .src = arg.Imm(null, .{}),
+        .src = arg.Imm(.{}),
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = op.Logic(.eor),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
@@ -647,5 +647,16 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.Addr(3, 0, .{ .none = .initDefault(0, .{ .addr_idx = 2, .pc_idx = 2 }) }),
         .dst = arg.AddrReg(9),
         .size = .{ .fixed = .l },
+    },
+
+    // Link and allocate
+    isa.Instr{
+        .name = "link",
+        .enc = .init("0100111001010xxx"),
+        .src = arg.Imm(.{ .hex = false }),
+        .dst = arg.AddrReg(0),
+        .op = op.Link,
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst, .comma, .src },
     },
 });

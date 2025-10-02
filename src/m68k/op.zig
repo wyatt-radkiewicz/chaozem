@@ -343,6 +343,16 @@ pub const Jsr = struct {
     }
 };
 
+/// Link and allocate
+pub const Link = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, src: u16, dst: u32) u32 {
+        ctx.push(u32, dst);
+        const stack = ctx.cpu.a[7];
+        ctx.cpu.a[7] +%= int.extend(u32, src);
+        return stack;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {
