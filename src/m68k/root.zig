@@ -713,4 +713,24 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Shift(true, .lr),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+    
+    // Move data
+    isa.Instr{
+        .name = "move",
+        .enc = .init("00xxxxxxxxxxxxxx"),
+        .src = arg.Ea(3, 0, .{}),
+        .dst = arg.Ea(6, 9, .{}),
+        .op = op.Move,
+        .size = .{ .dyn = .{ .at = 12, .b = 0b01, .w = 0b11, .l = 0b10 } },
+    },
+    
+    // Move address
+    isa.Instr{
+        .name = "movea",
+        .enc = .init("00xxxxx001xxxxxx"),
+        .src = arg.Ea(3, 0, .{}),
+        .dst = arg.AddrReg(9),
+        .op = op.Movea,
+        .size = .{ .dyn = .{ .at = 12, .w = 0b11, .l = 0b10 } },
+    },
 });

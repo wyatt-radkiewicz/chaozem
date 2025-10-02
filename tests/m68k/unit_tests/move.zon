@@ -12,5 +12,29 @@
                 .addr = .{ 10, 10 },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x1001},
+                .data = .{ 0, 10 },
+            },
+            .expect = .{
+                .disasm = "move.b d1,d0",
+                .clk = 4,
+                .data = .{ 10, 10 },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x3041},
+                .data = .{ 0, 0x800A },
+                .addr = .{0},
+            },
+            .expect = .{
+                .disasm = "movea.w d1,a0",
+                .clk = 4,
+                .data = .{ 0, 0x800A },
+                .addr = .{0xFFFF800A},
+            },
+        },
     },
 }
