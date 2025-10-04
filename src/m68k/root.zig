@@ -659,7 +659,7 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .w },
         .disasm = &.{ .name, .size, .space, .dst, .comma, .src },
     },
-    
+
     // Logical shift left
     isa.Instr{
         .name = "lsl",
@@ -713,24 +713,45 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Shift(true, .lr),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
-    
+
     // Move data
     isa.Instr{
         .name = "move",
         .enc = .init("00xxxxxxxxxxxxxx"),
         .src = arg.Ea(3, 0, .{}),
         .dst = arg.Ea(6, 9, .{}),
-        .op = op.Move,
+        .op = op.Move(true),
         .size = .{ .dyn = .{ .at = 12, .b = 0b01, .w = 0b11, .l = 0b10 } },
     },
-    
+
     // Move address
     isa.Instr{
         .name = "movea",
         .enc = .init("00xxxxx001xxxxxx"),
         .src = arg.Ea(3, 0, .{}),
         .dst = arg.AddrReg(9),
-        .op = op.Movea,
+        .op = op.MoveExtend(u32),
         .size = .{ .dyn = .{ .at = 12, .w = 0b11, .l = 0b10 } },
+    },
+
+    // Move to CCR
+    isa.Instr{
+        .name = "move",
+        .enc = .init("0100010011xxxxxx"),
+        .src = arg.Ea(3, 0, .{}),
+        .dst = arg.Status,
+        .op = op.Move(false),
+        .size = .{ .fixed = .w },
+        .clk = 8,
+    },
+
+    // Move from SR
+    isa.Instr{
+        .name = "move",
+        .enc = .init("0100000011xxxxxx"),
+        .src = arg.Status,
+        .dst = arg.Ea(3, 0, .{ .w = .initDefault(2, .{ .data_reg = 2 }) }),
+        .op = op.Move(false),
+        .size = .{ .fixed = .w },
     },
 });

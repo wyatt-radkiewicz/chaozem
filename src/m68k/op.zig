@@ -378,22 +378,28 @@ pub const Link = struct {
 };
 
 /// Move src to dst
-pub const Move = struct {
-    pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), _: size.Int()) size.Int() {
-        ctx.cpu.sr.n = int.negative(src);
-        ctx.cpu.sr.z = src == 0;
-        ctx.cpu.sr.v = false;
-        ctx.cpu.sr.c = false;
-        return src;
-    }
-};
+pub fn Move(comptime update_flags: bool) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), _: size.Int()) size.Int() {
+            if (update_flags) {
+                ctx.cpu.sr.n = int.negative(src);
+                ctx.cpu.sr.z = src == 0;
+                ctx.cpu.sr.v = false;
+                ctx.cpu.sr.c = false;
+            }
+            return src;
+        }
+    };
+}
 
-/// Move src to address
-pub const Movea = struct {
-    pub fn op(_: *Ctx, comptime size: Size, src: size.Int(), _: u32) u32 {
-        return int.extend(u32, src);
-    }
-};
+/// Move sign extended source to dst
+pub fn MoveExtend(comptime Dst: type) type {
+    return struct {
+        pub fn op(_: *Ctx, comptime size: Size, src: size.Int(), _: Dst) Dst {
+            return int.extend(Dst, src);
+        }
+    };
+}
 
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {

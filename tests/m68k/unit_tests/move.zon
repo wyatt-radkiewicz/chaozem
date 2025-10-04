@@ -36,5 +36,31 @@
                 .addr = .{0xFFFF800A},
             },
         },
+        .{
+            .env = .{
+                .code = .{0x44C0},
+                .data = .{0x001f},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+            .expect = .{
+                .disasm = "move.w d0,sr",
+                .clk = 12,
+                .data = .{0x001f},
+                .flags = .{ .c = true, .v = true, .z = true, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x40C0},
+                .data = .{0xFFFFFFFF},
+                .flags = .{ .c = true, .v = false, .z = true, .n = false, .x = true },
+            },
+            .expect = .{
+                .disasm = "move.w sr,d0",
+                .clk = 6,
+                .data = .{0xFFFF2015},
+                .flags = .{ .c = true, .v = false, .z = true, .n = false, .x = true },
+            },
+        },
     },
 }
