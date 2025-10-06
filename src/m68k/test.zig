@@ -24,10 +24,10 @@ const Test = struct {
     fn run(this: @This(), group: []const u8, vectors: Vectors, allocator: std.mem.Allocator) !void {
         // Setup the environment to test
         const err_ctx = .{ group, this.expect.disasm };
-        var rom = Rom.init(vectors, this.env.code);
-        var ram = Ram.init(this.env.ram);
+        var rom = Rom{};
+        var ram = Ram{};
         var cpu = Cpu{};
-        this.env.setup(vectors, &cpu);
+        this.env.setup(vectors, &cpu, &rom, &ram);
 
         // Create a bus interface to access the environment
         var bus = Bus.init(&.{
@@ -127,17 +127,39 @@ const Flags = struct {
 const Env = struct {
     code: []const u16,
     ram: []const u16 = &.{},
+    stack: []const u16 = &.{},
     data: []const u32 = &.{},
     addr: []const u32 = &.{},
     flags: Flags = .{},
 
     /// Initialize the state of the cpu
-    fn setup(this: @This(), vectors: Vectors, cpu: *Cpu) void {
+    fn setup(this: @This(), vectors: Vectors, cpu: *Cpu, rom: *Rom, ram: *Ram) void {
+        // Inject the vectors into the rom
+        inline for (comptime std.meta.fieldNames(m68k.Vector)) |vector| {
+            if (@hasField(Vectors, vector)) {
+                const addr = @field(m68k.Vector, vector).addr();
+                const value = @field(vectors, vector);
+                rom.words[addr >> 1] = @truncate(value >> 16);
+                rom.words[(addr >> 1) + 1] = @truncate(value);
+            }
+        }
+
+        // Inject the code into the rom
+        const code_start = vectors.reset_pc >> 1;
+        @memcpy(rom.words[code_start .. code_start + this.code.len], this.code);
+
+        // Inject data and stack into ram
+        @memcpy(ram.words[0..this.ram.len], this.ram);
+        @memcpy(ram.words[ram.words.len - this.stack.len ..], this.stack);
+
+        // Setup the special purpose registers
+        cpu.pc = vectors.reset_pc;
+        cpu.a[7] = vectors.reset_sp - @as(u32, @intCast(this.stack.len * 2));
+        this.flags.setup(cpu);
+
+        // Setup the general purpose registers
         @memcpy(cpu.d[0..this.data.len], this.data);
         @memcpy(cpu.a[0..this.addr.len], this.addr);
-        cpu.pc = vectors.reset_pc;
-        cpu.a[7] = vectors.reset_sp;
-        this.flags.setup(cpu);
     }
 };
 
@@ -184,25 +206,6 @@ const Rom = struct {
     write_addr: ?u24 = null,
     write_data: u16 = 0,
 
-    /// Setup the rom with the vectors and code
-    fn init(vectors: Vectors, code: []const u16) @This() {
-        // Inject the vectors into the rom
-        var this = @This(){};
-        inline for (comptime std.meta.fieldNames(m68k.Vector)) |vector| {
-            if (@hasField(Vectors, vector)) {
-                const addr = @field(m68k.Vector, vector).addr();
-                const value = @field(vectors, vector);
-                this.words[addr >> 1] = @truncate(value >> 16);
-                this.words[(addr >> 1) + 1] = @truncate(value);
-            }
-        }
-
-        // Inject the code into the rom
-        const code_start = vectors.reset_pc >> 1;
-        @memcpy(this.words[code_start .. code_start + code.len], code);
-        return this;
-    }
-
     /// Get data from ROM
     pub fn read(dev: *Device, addr: u23, _: u2) ?u16 {
         const this: *@This() = @fieldParentPtr("device", dev);
@@ -221,13 +224,6 @@ const Rom = struct {
 const Ram = struct {
     words: [0x1000 >> 1]u16 = [1]u16{0} ** (0x1000 >> 1),
     device: Device = .{ .read = read, .write = write },
-
-    /// Initialize the ram chip
-    fn init(ram: []const u16) @This() {
-        var this = @This(){};
-        @memcpy(this.words[0..ram.len], ram);
-        return this;
-    }
 
     /// Get data from RAM
     pub fn read(dev: *Device, addr: u23, _: u2) ?u16 {

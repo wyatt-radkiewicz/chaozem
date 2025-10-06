@@ -327,6 +327,117 @@ pub const Cond = enum(u4) {
     }
 };
 
+/// Register masks
+pub const RegMask = packed struct {
+    d: std.bit_set.IntegerBitSet(8),
+    a: std.bit_set.IntegerBitSet(8),
+
+    /// Order to store registers in
+    pub const Order = enum {
+        forward,
+        reverse,
+
+        /// Gets the register type order
+        fn types(this: @This()) []const []const u8 {
+            return switch (this) {
+                .forward => &.{ "d", "a" },
+                .reverse => &.{ "a", "d" },
+            };
+        }
+
+        /// Gets mask iterator options
+        fn iteratorOptions(this: @This()) std.bit_set.IteratorOptions {
+            return .{ .direction = @field(std.bit_set.IteratorOptions.Direction, switch (this) {
+                inline else => |x| @tagName(x),
+            }) };
+        }
+    };
+
+    /// Get the number of registers set in this mask
+    pub fn count(this: @This()) usize {
+        return this.d.count() + this.a.count();
+    }
+
+    /// Store a register mask to memory
+    pub fn store(
+        this: @This(),
+        comptime size: Size,
+        ctx: *Ctx,
+        addr: u32,
+        comptime order: Order,
+    ) void {
+        var offs: u32 = 0;
+        inline for (comptime order.types()) |reg_type| {
+            var iter = @field(this, reg_type).iterator(order.iteratorOptions());
+            while (iter.next()) |idx| : (offs += size.bits() / 8) {
+                const reg = @field(ctx.cpu, reg_type)[idx];
+                ctx.write(size.Int(), addr +% offs, @truncate(reg));
+            }
+        }
+    }
+
+    /// Load registers from memory using a mask
+    pub fn load(
+        this: @This(),
+        comptime size: Size,
+        ctx: *Ctx,
+        addr: u32,
+        comptime order: Order,
+    ) void {
+        var offs: u32 = 0;
+        inline for (comptime order.types()) |reg_type| {
+            var iter = @field(this, reg_type).iterator(order.iteratorOptions());
+            while (iter.next()) |idx| : (offs += size.bits() / 8) {
+                const data = ctx.read(size.Int(), addr +% offs);
+                const reg = &@field(ctx.cpu, reg_type)[idx];
+                reg.* = int.overwrite(reg.*, data);
+            }
+        }
+    }
+
+    /// Disassemble the register mask
+    pub const Disasm = struct {
+        reader: *std.io.Reader,
+        mask: RegMask,
+
+        pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+            inline for (&.{ "d", "a" }) |reg_type| {
+                var bits = @field(this.mask, reg_type).mask;
+                var idx: u4 = 0;
+                while (bits != 0) {
+                    const ones = @ctz(~bits);
+                    if (ones > 0) {
+                        if (ones == 1) {
+                            try writer.print("{s}{}", .{ reg_type, idx });
+                        } else {
+                            try writer.print(
+                                "{s}{}-{s}{}",
+                                .{ reg_type, idx, reg_type, idx + ones - 1 },
+                            );
+                        }
+
+                        if (ones != @bitSizeOf(@TypeOf(bits))) {
+                            bits >>= @intCast(ones);
+                            idx += ones;
+
+                            // Print the seperator if needed
+                            try writer.print("{s}", .{if (bits != 0) "/" else ""});
+                        }
+                    } else {
+                        bits >>= 1;
+                        idx += 1;
+                    }
+                }
+
+                // Print a seperator between data and address registers
+                try writer.print("{s}", .{if (this.mask.d.count() > 0 and
+                    this.mask.a.count() > 0 and
+                    comptime std.mem.eql(u8, reg_type, "d")) "/" else ""});
+            }
+        }
+    };
+};
+
 /// Fetch a type from the program counter of the cpu
 pub inline fn fetch(this: *Ctx, comptime Data: type) Data {
     const fetch_width = @max(16, @bitSizeOf(Data));

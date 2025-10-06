@@ -754,4 +754,22 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Move(false),
         .size = .{ .fixed = .w },
     },
+
+    // Store multiple registers to memory
+    isa.Instr{
+        .name = "movem",
+        .enc = .init("010010001xxxxxxx"),
+        .src = arg.MoveMultiple(.store, 3, 0),
+        .dst = arg.MoveMultiple(.addr, 3, 0),
+        .size = .{ .dyn = .{ .at = 6, .w = 0, .l = 1 } },
+    },
+
+    // Load multiple registers from memory
+    isa.Instr{
+        .name = "movem",
+        .enc = .init("010011001xxxxxxx"),
+        .src = arg.MoveMultiple(.addr, 3, 0),
+        .dst = arg.MoveMultiple(.load, 3, 0),
+        .size = .{ .dyn = .{ .at = 6, .w = 0, .l = 1 } },
+    },
 });

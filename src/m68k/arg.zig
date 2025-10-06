@@ -443,6 +443,87 @@ pub fn Addr(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
     };
 }
 
+pub fn MoveMultiple(
+    comptime op: enum { store, load, addr },
+    comptime addr_m: u4,
+    comptime addr_n: u4,
+) type {
+    return struct {
+        pub fn decode(ctx: *Ctx, comptime size: Size, opcode: u16) @This() {
+            if (op == .addr) {
+                return .{};
+            }
+
+            const reg = int.extract(u3, opcode, addr_n);
+            const mode = Ctx.Mode.decode(int.extract(u3, opcode, addr_m), reg);
+            const mask = @as(Ctx.RegMask, @bitCast(switch (mode) {
+                .pre_dec => @bitReverse(ctx.fetch(u16)),
+                else => ctx.fetch(u16),
+            }));
+            switch (op) {
+                .load => {
+                    switch (mode) {
+                        .post_inc => {
+                            mask.load(size, ctx, ctx.cpu.a[reg], .forward);
+                            ctx.cpu.a[reg] +%= @intCast(mask.count() * size.bits() / 8);
+                        },
+                        .pre_dec => {}, // Pre-dec is only used when storing
+                        else => mask.load(size, ctx, mode.calc(ctx, size, reg), .forward),
+                    }
+                },
+                .store => {
+                    switch (mode) {
+                        .post_inc => {}, // Post-inc is only used when loading
+                        .pre_dec => {
+                            ctx.cpu.a[reg] -%= @intCast(mask.count() * size.bits() / 8);
+                            mask.store(size, ctx, ctx.cpu.a[reg], .forward);
+                        },
+                        else => mask.store(size, ctx, mode.calc(ctx, size, reg), .forward),
+                    }
+                },
+                .addr => {},
+            }
+            return .{};
+        }
+
+        pub fn load(_: @This(), _: *Ctx, comptime _: Size, _: u16) void {}
+
+        pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: u32) void {}
+
+        pub fn Disasm(comptime size: Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    const reg = int.extract(u3, this.opcode, addr_n);
+                    const mode = Ctx.Mode.decode(int.extract(u3, this.opcode, addr_m), reg);
+                    switch (op) {
+                        .load, .store => {
+                            const word = this.reader.takeInt(u16, .big) catch
+                                return error.WriteFailed;
+                            try writer.print("{f}", .{Ctx.RegMask.Disasm{
+                                .reader = this.reader,
+                                .mask = @bitCast(switch (mode) {
+                                    .pre_dec => @bitReverse(word),
+                                    else => word,
+                                }),
+                            }});
+                        },
+                        else => {
+                            try writer.print("{f}", .{Ctx.Mode.Disasm(size){
+                                .reader = this.reader,
+                                .mode = mode,
+                                .reg = reg,
+                            }});
+                        },
+                    }
+                }
+            };
+        }
+    };
+}
+
 /// Formatter options
 pub const FormatOptions = struct {
     hex: bool = true,
