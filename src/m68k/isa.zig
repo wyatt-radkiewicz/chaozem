@@ -89,9 +89,8 @@ pub const Instr = struct {
                                 const src_target = Src.decode(ctx, size, opcode);
                                 const src_data = src_target.load(ctx, size, opcode);
                                 const dst_target = Dst.decode(ctx, size, opcode);
-                                const dst_data = dst_target.load(ctx, size, opcode);
                                 const res = if (instr.op) |Op|
-                                    Op.op(ctx, size, src_data, dst_data)
+                                    Op.op(ctx, size, src_data, dst_target.load(ctx, size, opcode))
                                 else
                                     src_data;
                                 if (@TypeOf(res) != void) {
@@ -103,13 +102,17 @@ pub const Instr = struct {
                                 const Dst = instr.dst orelse unreachable;
                                 const ctx_target = (instr.ctx orelse unreachable)
                                     .decode(ctx, size, opcode);
-                                const ctx_data = ctx_target.load(ctx, size, opcode);
                                 const src_target = Src.decode(ctx, size, opcode);
                                 const src_data = src_target.load(ctx, size, opcode);
                                 const dst_target = Dst.decode(ctx, size, opcode);
-                                const dst_data = dst_target.load(ctx, size, opcode);
                                 const res = if (instr.op) |Op|
-                                    Op.op(ctx, size, ctx_data, src_data, dst_data)
+                                    Op.op(
+                                        ctx,
+                                        size,
+                                        ctx_target.load(ctx, size, opcode),
+                                        src_data,
+                                        dst_target.load(ctx, size, opcode),
+                                    )
                                 else
                                     src_data;
                                 if (@TypeOf(res) != void) {

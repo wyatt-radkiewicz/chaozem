@@ -759,8 +759,8 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "movem",
         .enc = .init("010010001xxxxxxx"),
-        .src = arg.MoveMultiple(.store, 3, 0),
-        .dst = arg.MoveMultiple(.addr, 3, 0),
+        .src = arg.Multiple(.store, 3, 0),
+        .dst = arg.Multiple(.addr, 3, 0),
         .size = .{ .dyn = .{ .at = 6, .w = 0, .l = 1 } },
     },
 
@@ -768,8 +768,26 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "movem",
         .enc = .init("010011001xxxxxxx"),
-        .src = arg.MoveMultiple(.addr, 3, 0),
-        .dst = arg.MoveMultiple(.load, 3, 0),
+        .src = arg.Multiple(.addr, 3, 0),
+        .dst = arg.Multiple(.load, 3, 0),
+        .size = .{ .dyn = .{ .at = 6, .w = 0, .l = 1 } },
+    },
+
+    // Move data to peripheral
+    isa.Instr{
+        .name = "movep",
+        .enc = .init("0000xxx11x001xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.Peripheral(0),
+        .size = .{ .dyn = .{ .at = 6, .w = 0, .l = 1 } },
+    },
+
+    // Move data from peripheral
+    isa.Instr{
+        .name = "movep",
+        .enc = .init("0000xxx10x001xxx"),
+        .src = arg.Peripheral(0),
+        .dst = arg.DataReg(9),
         .size = .{ .dyn = .{ .at = 6, .w = 0, .l = 1 } },
     },
 });

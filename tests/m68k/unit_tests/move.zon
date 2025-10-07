@@ -117,5 +117,32 @@
                 .addr = .{ 0xFFFF, 0x0001, 0, 0, 0, 0, 0, 0x2000 },
             },
         },
+        .{
+            .env = .{
+                .code = .{ 0x01C8, 0x0002 },
+                .data = .{0x12345678},
+                .addr = .{0x0FFE},
+            },
+            .expect = .{
+                .disasm = "movep.l d0,(#2,a0)",
+                .clk = 24,
+                .ram = .{ 0x1200, 0x3400, 0x5600, 0x7800 },
+                .data = .{0x12345678},
+                .addr = .{0x0FFE},
+            },
+        },
+        .{
+            .env = .{
+                .code = .{ 0x0108, 0x0002 },
+                .data = .{0x0000},
+                .addr = .{0x0FFE},
+                .ram = .{ 0x1200, 0x3400 },
+            },
+            .expect = .{
+                .disasm = "movep.w (#2,a0),d0",
+                .clk = 16,
+                .data = .{0x1234},
+            },
+        },
     },
 }

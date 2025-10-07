@@ -443,7 +443,7 @@ pub fn Addr(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
     };
 }
 
-pub fn MoveMultiple(
+pub fn Multiple(
     comptime op: enum { store, load, addr },
     comptime addr_m: u4,
     comptime addr_n: u4,
@@ -518,6 +518,52 @@ pub fn MoveMultiple(
                             }});
                         },
                     }
+                }
+            };
+        }
+    };
+}
+
+/// Move to and from peripherals
+pub fn Peripheral(comptime addr_n: u4) type {
+    return struct {
+        disp: u32,
+        reg: u3,
+
+        pub fn decode(ctx: *Ctx, comptime _: Size, opcode: u16) @This() {
+            return .{
+                .disp = int.extend(u32, ctx.fetch(u16)),
+                .reg = int.extract(u3, opcode, addr_n),
+            };
+        }
+
+        pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
+            var addr = ctx.cpu.a[this.reg] +% this.disp;
+            var val: size.Int() = 0;
+            inline for (0..size.bits() / 8) |byte| {
+                val |= @as(size.Int(), ctx.read(u8, addr)) << size.bits() - 8 - byte * 8;
+                addr += 2;
+            }
+            return val;
+        }
+
+        pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
+            var addr = ctx.cpu.a[this.reg] +% this.disp;
+            inline for (0..size.bits() / 8) |byte| {
+                ctx.write(u8, addr, @truncate(data >> size.bits() - 8 - byte * 8));
+                addr += 2;
+            }
+        }
+
+        pub fn Disasm(comptime _: Size) type {
+            return struct {
+                reader: *std.io.Reader,
+                opcode: u16,
+
+                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                    const reg = int.extract(u3, this.opcode, addr_n);
+                    const disp = this.reader.takeInt(i16, .big) catch return error.WriteFailed;
+                    try writer.print("(#{},a{})", .{ disp, reg });
                 }
             };
         }
