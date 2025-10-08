@@ -380,14 +380,14 @@ pub const Link = struct {
 /// Move src to dst
 pub fn Move(comptime update_flags: bool) type {
     return struct {
-        pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), _: size.Int()) size.Int() {
+        pub fn op(ctx: *Ctx, comptime size: Size, src: anytype, _: size.Int()) size.Int() {
             if (update_flags) {
                 ctx.cpu.sr.n = int.negative(src);
                 ctx.cpu.sr.z = src == 0;
                 ctx.cpu.sr.v = false;
                 ctx.cpu.sr.c = false;
             }
-            return src;
+            return int.extend(size.Int(), src);
         }
     };
 }

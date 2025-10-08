@@ -790,4 +790,14 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.DataReg(9),
         .size = .{ .dyn = .{ .at = 6, .w = 0, .l = 1 } },
     },
+
+    // Move quick
+    isa.Instr{
+        .name = "moveq",
+        .enc = .init("0111xxx0xxxxxxxx"),
+        .src = arg.Opcode(i8, 0),
+        .dst = arg.DataReg(9),
+        .op = op.Move(true),
+        .size = .{ .fixed = .l },
+    },
 });
