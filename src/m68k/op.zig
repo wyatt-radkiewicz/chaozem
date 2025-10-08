@@ -11,7 +11,7 @@ pub const Abcd = struct {
         const result = Ctx.tobcd(Ctx.frombcd(src) + Ctx.frombcd(dst) + @intFromBool(ctx.cpu.sr.x));
         ctx.cpu.sr.x = result[1];
         ctx.cpu.sr.c = result[1];
-        ctx.cpu.sr.z = @intFromBool(ctx.cpu.sr.z) & @intFromBool(result[1]) == 1;
+        ctx.cpu.sr.z = @intFromBool(ctx.cpu.sr.z) & @intFromBool(result[0] == 0) == 1;
         return result[0];
     }
 };
@@ -433,6 +433,31 @@ pub const Mulu = struct {
         ctx.cpu.sr.v = false;
         ctx.cpu.sr.c = false;
         return res;
+    }
+};
+
+/// Subtract binary decimal with extend
+pub const Sbcd = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, src: u8, dst: u8) u8 {
+        var result = Ctx.frombcd(src);
+        ctx.cpu.sr.c = false;
+
+        result -%= Ctx.frombcd(dst);
+        if (result > 99) {
+            result -= 156;
+            ctx.cpu.sr.c = true;
+        }
+
+        result -%= @intFromBool(ctx.cpu.sr.x);
+        if (result > 99) {
+            result -= 156;
+            ctx.cpu.sr.c = true;
+        }
+
+        result = Ctx.tobcd(result)[0];
+        ctx.cpu.sr.x = ctx.cpu.sr.c;
+        ctx.cpu.sr.z = @intFromBool(ctx.cpu.sr.z) & @intFromBool(result == 0) == 1;
+        return result;
     }
 };
 

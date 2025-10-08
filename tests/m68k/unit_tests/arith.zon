@@ -367,5 +367,32 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x4800},
+                .data = .{0x34},
+                .flags = .{ .x = false },
+            },
+            .expect = .{
+                .disasm = "nbcd.b d0",
+                .clk = 6,
+                .data = .{0x66},
+                .flags = .{ .c = true, .z = false, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4810},
+                .ram = .{0x3400},
+                .addr = .{0x1000},
+                .flags = .{ .x = true },
+            },
+            .expect = .{
+                .disasm = "nbcd.b (a0)",
+                .clk = 12,
+                .ram = .{0x6500},
+                .flags = .{ .c = true, .z = false, .x = true },
+            },
+        },
     },
 }

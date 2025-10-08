@@ -822,4 +822,15 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Mulu,
         .size = .{ .fixed = .w },
     },
+
+    // Negate binary coded decimal
+    isa.Instr{
+        .name = "nbcd",
+        .enc = .init("0100100000xxxxxx"),
+        .src = arg.Const(u8, 0),
+        .dst = arg.Ea(3, 0, .{ .b = .initDefault(0, .{ .data_reg = 2 }) }),
+        .op = op.Sbcd,
+        .size = .{ .fixed = .b },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
 });
