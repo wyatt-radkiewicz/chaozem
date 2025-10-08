@@ -401,6 +401,41 @@ pub fn MoveExtend(comptime Dst: type) type {
     };
 }
 
+/// Signed multiply
+pub const Muls = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, src: u16, dst: u16) u32 {
+        ctx.clk += 34;
+        var shifter = @as(u17, src) << 1;
+        inline for (0..16) |_| {
+            ctx.clk += switch (@as(u2, @truncate(shifter))) {
+                0b01, 0b10 => 2,
+                else => 0,
+            };
+            shifter >>= 1;
+        }
+
+        const res = @as(i32, int.castsign(.signed, src)) * @as(i32, int.castsign(.signed, dst));
+        ctx.cpu.sr.n = int.negative(res);
+        ctx.cpu.sr.z = res == 0;
+        ctx.cpu.sr.v = false;
+        ctx.cpu.sr.c = false;
+        return @bitCast(res);
+    }
+};
+
+/// Unsigned multiply
+pub const Mulu = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, src: u16, dst: u16) u32 {
+        const res = @as(u32, src) * @as(u32, dst);
+        ctx.clk += 34 + 2 * @as(usize, @popCount(src));
+        ctx.cpu.sr.n = int.negative(res);
+        ctx.cpu.sr.z = res == 0;
+        ctx.cpu.sr.v = false;
+        ctx.cpu.sr.c = false;
+        return res;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

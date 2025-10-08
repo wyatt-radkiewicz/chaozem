@@ -18,8 +18,9 @@ pub fn DataReg(n: u4) type {
             return @truncate(ctx.cpu.d[this.n]);
         }
 
-        pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
-            ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], data);
+        pub fn store(this: @This(), ctx: *Ctx, comptime _: Size, _: u16, data: anytype) void {
+            const Int = std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(data)));
+            ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], @as(Int, @bitCast(data)));
         }
 
         pub fn Disasm(comptime _: Size) type {

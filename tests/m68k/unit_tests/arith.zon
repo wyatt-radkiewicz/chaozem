@@ -319,5 +319,53 @@
                 .flags = .{ .c = false, .v = false, .z = true, .n = false, .x = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0xC1C1},
+                .data = .{ 0x0000, 0xFFFF },
+            },
+            .expect = .{
+                .disasm = "muls.w d1,d0",
+                .clk = 40,
+                .data = .{ 0x00000000, 0xFFFF },
+                .flags = .{ .c = false, .v = false, .z = true, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xC1C2},
+                .data = .{ 0xFFFF, 0, 0x5555 },
+            },
+            .expect = .{
+                .disasm = "muls.w d2,d0",
+                .clk = 70,
+                .data = .{ 0xFFFFAAAB, 0, 0x5555 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xC0C1},
+                .data = .{ 0x0001, 0x0000 },
+            },
+            .expect = .{
+                .disasm = "mulu.w d1,d0",
+                .clk = 38,
+                .data = .{ 0x00000000, 0x0000 },
+                .flags = .{ .c = false, .v = false, .z = true, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xC0C2},
+                .data = .{ 0xFFFF, 0, 0xFFFF },
+            },
+            .expect = .{
+                .disasm = "mulu.w d2,d0",
+                .clk = 70,
+                .data = .{ 0xFFFE0001, 0, 0xFFFF },
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
     },
 }

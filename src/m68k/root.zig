@@ -27,6 +27,8 @@ pub fn step(cpu: *Cpu, bus: *Bus) usize {
     const opcode = ctx.fetch(u16);
     if (m68k_isa.runner(opcode)) |pfn| {
         pfn(&ctx, opcode);
+    } else {
+        Ctx.Vector.illegal.handle(&ctx);
     }
     return ctx.clk;
 }
@@ -799,5 +801,25 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.DataReg(9),
         .op = op.Move(true),
         .size = .{ .fixed = .l },
+    },
+
+    // Multiply signed
+    isa.Instr{
+        .name = "muls",
+        .enc = .init("1100xxx111xxxxxx"),
+        .src = arg.Ea(3, 0, .{}),
+        .dst = arg.DataReg(9),
+        .op = op.Muls,
+        .size = .{ .fixed = .w },
+    },
+
+    // Multiply unsigned
+    isa.Instr{
+        .name = "mulu",
+        .enc = .init("1100xxx011xxxxxx"),
+        .src = arg.Ea(3, 0, .{}),
+        .dst = arg.DataReg(9),
+        .op = op.Mulu,
+        .size = .{ .fixed = .w },
     },
 });
