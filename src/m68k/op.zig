@@ -50,11 +50,12 @@ pub const Addx = struct {
 };
 
 /// Bitwise logical operation
-pub fn Logic(comptime mode: enum { @"and", eor }) type {
+pub fn Logic(comptime mode: enum { @"and", @"or", eor }) type {
     return struct {
         pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
             const result = switch (mode) {
                 .@"and" => dst & src,
+                .@"or" => dst | src,
                 .eor => dst ^ src,
             };
             ctx.cpu.sr.n = int.negative(result);

@@ -891,4 +891,44 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .l },
         .disasm = &.{ .name, .size, .space, .dst },
     },
+    
+    // Logical or
+    isa.Instr{
+        .name = "or",
+        .enc = .init("1000xxx0xxxxxxxx"),
+        .src = arg.Ea(3, 0, .{ .l = .initDefault(2, .{
+            .data_reg = 4,
+            .immediate = 4,
+        }) }),
+        .dst = arg.DataReg(9),
+        .op = op.Logic(.@"or"),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    isa.Instr{
+        .name = "or",
+        .enc = .init("1000xxx1xxxxxxxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Logic(.@"or"),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    
+    // Logical or immediate
+    isa.Instr{
+        .name = "ori",
+        .enc = .init("00000000xx111100"),
+        .src = arg.Imm(.{}),
+        .dst = arg.Status,
+        .op = op.Logic(.@"or"),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01 } },
+        .clk = 12,
+    },
+    isa.Instr{
+        .name = "ori",
+        .enc = .init("00000000xxxxxxxx"),
+        .src = arg.Imm(.{}),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
+        .op = op.Logic(.@"or"),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
 });
