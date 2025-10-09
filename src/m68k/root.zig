@@ -855,4 +855,40 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
         .disasm = &.{ .name, .size, .space, .dst },
     },
+
+    // No operation (NOP)
+    isa.Instr{
+        .name = "nop",
+        .enc = .init("0100111001110001"),
+        .size = .{ .fixed = .none },
+    },
+
+    // Bitwise not
+    isa.Instr{
+        .name = "not",
+        .enc = .init("0100011000xxxxxx"),
+        .src = arg.Const(u8, 0xFF),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 2 }) }),
+        .op = op.Logic(.eor),
+        .size = .{ .fixed = .b },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "not",
+        .enc = .init("0100011001xxxxxx"),
+        .src = arg.Const(u16, 0xFFFF),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 2 }) }),
+        .op = op.Logic(.eor),
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "not",
+        .enc = .init("0100011010xxxxxx"),
+        .src = arg.Const(u32, 0xFFFFFFFF),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 2 }) }),
+        .op = op.Logic(.eor),
+        .size = .{ .fixed = .l },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
 });

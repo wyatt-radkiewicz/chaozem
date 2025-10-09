@@ -225,5 +225,41 @@
                 .flags = .{ .c = true, .v = false, .z = true, .n = false, .x = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x4600},
+                .data = .{0xCC},
+            },
+            .expect = .{
+                .disasm = "not.b d0",
+                .clk = 4,
+                .data = .{0x33},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4640},
+                .data = .{0x3333},
+            },
+            .expect = .{
+                .disasm = "not.w d0",
+                .clk = 4,
+                .data = .{0xCCCC},
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4680},
+                .data = .{0xFFFFFFFF},
+            },
+            .expect = .{
+                .disasm = "not.l d0",
+                .clk = 6,
+                .data = .{0},
+                .flags = .{ .c = false, .v = false, .z = true, .n = false },
+            },
+        },
     },
 }
