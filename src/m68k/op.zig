@@ -498,6 +498,13 @@ pub fn Subx(comptime minuend: enum { dst, src }) type {
     };
 }
 
+/// Push value onto the stack
+pub const Push = struct {
+    pub fn op(ctx: *Ctx, comptime size: Size, dst: size.Int()) void {
+        ctx.push(size.Int(), dst);
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

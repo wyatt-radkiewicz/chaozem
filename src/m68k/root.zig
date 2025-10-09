@@ -891,7 +891,7 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .l },
         .disasm = &.{ .name, .size, .space, .dst },
     },
-    
+
     // Logical or
     isa.Instr{
         .name = "or",
@@ -912,7 +912,7 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Logic(.@"or"),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
-    
+
     // Logical or immediate
     isa.Instr{
         .name = "ori",
@@ -930,5 +930,14 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 4 }) }),
         .op = op.Logic(.@"or"),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+
+    // Push effective address
+    isa.Instr{
+        .name = "pea",
+        .enc = .init("0100100001xxxxxx"),
+        .src = arg.Addr(3, 0, .{ .l = .initDefault(0, .{ .pc_idx = 2, .addr_idx = 2 }) }),
+        .op = op.Push,
+        .size = .{ .fixed = .l },
     },
 });
