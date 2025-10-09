@@ -461,6 +461,42 @@ pub const Sbcd = struct {
     }
 };
 
+/// Normal subtraction operation
+pub fn Sub(comptime minuend: enum { dst, src }) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
+            const result = Arith(size).sub(switch (minuend) {
+                .dst => .{ dst, src },
+                .src => .{ src, dst },
+            });
+            ctx.cpu.sr.x = result.carry;
+            ctx.cpu.sr.n = int.negative(result.val);
+            ctx.cpu.sr.z = result.val == 0;
+            ctx.cpu.sr.v = result.overflow;
+            ctx.cpu.sr.c = result.carry;
+            return result.val;
+        }
+    };
+}
+
+/// Extended subtraction operation
+pub fn Subx(comptime minuend: enum { dst, src }) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
+            const result = Arith(size).sub(switch (minuend) {
+                .dst => .{ dst, src },
+                .src => .{ src, dst },
+            } ++ .{@intFromBool(ctx.cpu.sr.x)});
+            ctx.cpu.sr.x = result.carry;
+            ctx.cpu.sr.n = int.negative(result.val);
+            ctx.cpu.sr.z = ctx.cpu.sr.z and result.val == 0;
+            ctx.cpu.sr.v = result.overflow;
+            ctx.cpu.sr.c = result.carry;
+            return result.val;
+        }
+    };
+}
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

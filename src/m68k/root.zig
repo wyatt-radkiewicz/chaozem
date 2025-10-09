@@ -833,4 +833,26 @@ const m68k_isa = isa.Isa(&.{
         .size = .{ .fixed = .b },
         .disasm = &.{ .name, .size, .space, .dst },
     },
+
+    // Negate register
+    isa.Instr{
+        .name = "neg",
+        .enc = .init("01000100xxxxxxxx"),
+        .src = arg.Const(u8, 0),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 2 }) }),
+        .op = op.Sub(.src),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+
+    // Negate with extend
+    isa.Instr{
+        .name = "negx",
+        .enc = .init("01000000xxxxxxxx"),
+        .src = arg.Const(u8, 0),
+        .dst = arg.Ea(3, 0, .{ .l = .initDefault(0, .{ .data_reg = 2 }) }),
+        .op = op.Subx(.src),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
 });

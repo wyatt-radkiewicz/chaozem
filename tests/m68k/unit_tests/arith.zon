@@ -394,5 +394,30 @@
                 .flags = .{ .c = true, .z = false, .x = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x4400},
+                .data = .{0x23},
+            },
+            .expect = .{
+                .disasm = "neg.b d0",
+                .clk = 4,
+                .data = .{0xDD},
+                .flags = .{ .c = true, .v = false, .z = false, .n = true, .x = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4000},
+                .data = .{0x23},
+                .flags = .{ .x = true, .z = true },
+            },
+            .expect = .{
+                .disasm = "negx.b d0",
+                .clk = 4,
+                .data = .{0xDC},
+                .flags = .{ .c = true, .v = false, .z = false, .n = true, .x = true },
+            },
+        },
     },
 }
