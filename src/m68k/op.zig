@@ -505,6 +505,73 @@ pub const Push = struct {
     }
 };
 
+/// Rotate left and rigth
+pub fn Rotate(comptime add_cycles: bool, comptime dir: enum { r, l, rx, lx }) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int(), dst: size.Int()) size.Int() {
+            // Calculate the base clock cycles of the operation
+            const shift = src & 64 - 1;
+            ctx.cpu.sr.v = false;
+            if (add_cycles) {
+                ctx.clk += shift * 2 + if (size.bits() > 16) @as(usize, 4) else @as(usize, 2);
+            }
+
+            // The rotate result
+            const Data = switch (dir) {
+                .rx, .lx => std.meta.Int(.unsigned, size.bits() + 1),
+                .r, .l => size.Int(),
+            };
+            var result = switch (dir) {
+                .rx => @as(Data, dst) + (@as(Data, @intFromBool(ctx.cpu.sr.x)) << size.bits()),
+                .lx => (@as(Data, dst) << 1) + @intFromBool(ctx.cpu.sr.x),
+                .r, .l => @as(Data, dst),
+            };
+            if (shift > 1) {
+                result = switch (dir) {
+                    .r, .rx => std.math.rotr(Data, result, shift - 1),
+                    .l, .lx => std.math.rotl(Data, result, shift - 1),
+                };
+            }
+
+            // Get the carry flag
+            if (shift > 0) {
+                ctx.cpu.sr.c = int.negative(result);
+                result = switch (dir) {
+                    .r, .rx => std.math.rotr(Data, result, 1),
+                    .l, .lx => std.math.rotl(Data, result, 1),
+                };
+            } else {
+                ctx.cpu.sr.c = switch (dir) {
+                    .rx, .lx => ctx.cpu.sr.x,
+                    .r, .l => false,
+                };
+            }
+
+            // Get the extend flag
+            switch (dir) {
+                .rx => {
+                    ctx.cpu.sr.x = result & @as(Data, 1) << size.bits() == 1;
+                    result &= std.math.maxInt(size.Int());
+                },
+                .lx => {
+                    ctx.cpu.sr.x = result & 1 == 1;
+                    result &= ~@as(Data, 1);
+                },
+                .l, .r => {},
+            }
+
+            // Get the negative and zero flags
+            ctx.cpu.sr.n = int.negative(result);
+            ctx.cpu.sr.z = result == 0;
+            return switch (dir) {
+                .rx => @truncate(result),
+                .lx => @truncate(result >> 1),
+                .r, .l => result,
+            };
+        }
+    };
+}
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

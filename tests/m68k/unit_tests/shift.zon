@@ -137,5 +137,57 @@
                 .flags = .{ .c = true, .v = false, .z = false, .n = false, .x = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{0xE958},
+                .data = .{0xE001},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+            .expect = .{
+                .disasm = "rol.w #4,d0",
+                .data = .{0x001E},
+                .clk = 14,
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xE910},
+                .data = .{0xE1},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = true },
+            },
+            .expect = .{
+                .disasm = "rolx.b #4,d0",
+                .data = .{0x1F},
+                .clk = 14,
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xE858},
+                .data = .{0x001E},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+            .expect = .{
+                .disasm = "ror.w #4,d0",
+                .data = .{0xE001},
+                .clk = 14,
+                .flags = .{ .c = true, .v = false, .z = false, .n = true },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0xE810},
+                .data = .{0xE1},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = true },
+            },
+            .expect = .{
+                .disasm = "rorx.b #4,d0",
+                .data = .{0x3E},
+                .clk = 14,
+                .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
+            },
+        },
     },
 }

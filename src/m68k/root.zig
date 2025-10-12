@@ -940,4 +940,112 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Push,
         .size = .{ .fixed = .l },
     },
+
+    // Rotate right
+    isa.Instr{
+        .name = "ror",
+        .enc = .init("1110011011xxxxxx"),
+        .src = arg.Const(u4, 1),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Rotate(false, .r),
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "ror",
+        .enc = .init("1110xxx0xx011xxx"),
+        .src = arg.Opcode(u3, 9),
+        .dst = arg.DataReg(0),
+        .op = op.Rotate(true, .r),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    isa.Instr{
+        .name = "ror",
+        .enc = .init("1110xxx0xx111xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.DataReg(0),
+        .op = op.Rotate(true, .r),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+
+    // Rotate left
+    isa.Instr{
+        .name = "rol",
+        .enc = .init("1110011111xxxxxx"),
+        .src = arg.Const(u4, 1),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Rotate(false, .l),
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "rol",
+        .enc = .init("1110xxx1xx011xxx"),
+        .src = arg.Opcode(u3, 9),
+        .dst = arg.DataReg(0),
+        .op = op.Rotate(true, .l),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    isa.Instr{
+        .name = "rol",
+        .enc = .init("1110xxx1xx111xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.DataReg(0),
+        .op = op.Rotate(true, .l),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+
+    // Rotate right extend
+    isa.Instr{
+        .name = "rorx",
+        .enc = .init("1110010011xxxxxx"),
+        .src = arg.Const(u4, 1),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Rotate(false, .rx),
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "rorx",
+        .enc = .init("1110xxx0xx010xxx"),
+        .src = arg.Opcode(u3, 9),
+        .dst = arg.DataReg(0),
+        .op = op.Rotate(true, .rx),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    isa.Instr{
+        .name = "rorx",
+        .enc = .init("1110xxx0xx110xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.DataReg(0),
+        .op = op.Rotate(true, .rx),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+
+    // Rotate left extend
+    isa.Instr{
+        .name = "rolx",
+        .enc = .init("1110010111xxxxxx"),
+        .src = arg.Const(u4, 1),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Rotate(false, .lx),
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "rolx",
+        .enc = .init("1110xxx1xx010xxx"),
+        .src = arg.Opcode(u3, 9),
+        .dst = arg.DataReg(0),
+        .op = op.Rotate(true, .lx),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+    isa.Instr{
+        .name = "rolx",
+        .enc = .init("1110xxx1xx110xxx"),
+        .src = arg.DataReg(9),
+        .dst = arg.DataReg(0),
+        .op = op.Rotate(true, .lx),
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
 });
