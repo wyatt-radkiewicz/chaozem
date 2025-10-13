@@ -161,5 +161,19 @@
                 .clk = 16,
             },
         },
+        // Return from exception
+        .{
+            .env = .{
+                .code = .{0x4E73},
+                .stack = .{ 0x0001, 0x0000, 0x0200 },
+            },
+            .expect = .{
+                .disasm = "rte",
+                .pc = 0x100,
+                .flags = .{ .x = false, .n = false, .z = false, .v = false, .c = true },
+                .stack = .{},
+                .clk = 20,
+            },
+        },
     },
 }

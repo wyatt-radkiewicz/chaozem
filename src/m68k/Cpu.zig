@@ -15,7 +15,7 @@ sr: Status = .{},
 stop: bool = false,
 
 /// M68K processor status flags
-pub const Status = packed struct {
+pub const Status = packed struct(u16) {
     /// Carry
     c: bool = false,
     /// Overflow

@@ -274,8 +274,9 @@ pub const Vector = enum(u6) {
         };
 
         // Push the program counter, status register, and jump to the vector
-        ctx.push(u32, ctx.cpu.pc);
-        ctx.push(Cpu.Status, ctx.cpu.sr);
+        ctx.push(null, u32, ctx.cpu.pc);
+        ctx.push(null, Cpu.Status, ctx.cpu.sr);
+        ctx.cpu.sr.s = true;
         ctx.cpu.pc = ctx.read(u32, this.addr());
     }
 };
@@ -493,19 +494,21 @@ pub inline fn write(this: *Ctx, comptime Data: type, addr: u32, data: Data) void
 }
 
 /// Push data onto the stack
-pub inline fn push(this: *Ctx, comptime Data: type, data: Data) void {
+pub inline fn push(this: *Ctx, comptime stack: ?u1, comptime Data: type, data: Data) void {
     const bits = @bitSizeOf(Data);
     const Push = std.meta.Int(.unsigned, @max(16, bits));
-    this.cpu.an(7).* -%= @sizeOf(Push);
-    this.write(Push, this.cpu.an(7).*, @as(std.meta.Int(.unsigned, bits), @bitCast(data)));
+    const n = stack orelse @intFromBool(this.cpu.sr.s);
+    this.cpu.sp[n] -%= @sizeOf(Push);
+    this.write(Push, this.cpu.sp[n], @as(std.meta.Int(.unsigned, bits), @bitCast(data)));
 }
 
 /// Pop data off the stack
-pub inline fn pop(this: *Ctx, comptime Data: type) Data {
+pub inline fn pop(this: *Ctx, comptime stack: ?u1, comptime Data: type) Data {
     const bits = @bitSizeOf(Data);
     const Push = std.meta.Int(.unsigned, @max(16, bits));
-    const data = this.read(Push, this.cpu.an(7).*);
-    this.cpu.an(7).* +%= @sizeOf(Push);
+    const n = stack orelse @intFromBool(this.cpu.sr.s);
+    const data = this.read(Push, this.cpu.sp[n]);
+    this.cpu.sp[n] +%= @sizeOf(Push);
     return @bitCast(@as(std.meta.Int(.unsigned, bits), @truncate(data)));
 }
 

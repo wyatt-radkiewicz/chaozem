@@ -229,5 +229,25 @@
                 .clk = 12,
             },
         },
+        .{
+            .env = .{
+                .code = .{ 0x4E72, 0x0015 },
+            },
+            .expect = .{
+                .disasm = "stop #$0015",
+                .stop = true,
+                .flags = .{ .x = true, .n = false, .z = true, .v = false, .c = true },
+                .clk = 4,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4E70},
+            },
+            .expect = .{
+                .disasm = "reset",
+                .clk = 132,
+            },
+        },
     },
 }

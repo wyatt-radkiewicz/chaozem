@@ -128,7 +128,7 @@ pub const Branch = struct {
         const base = ctx.cpu.pc -% (size.bits() / 16 * 2);
         if (src == .f) {
             ctx.clk += 2;
-            ctx.push(u32, ctx.cpu.pc);
+            ctx.push(null, u32, ctx.cpu.pc);
             ctx.cpu.pc = base +% int.extend(u32, dst);
         } else if (!src.value(ctx.cpu.sr)) {
             ctx.clk += 4;
@@ -364,7 +364,7 @@ pub const Jmp = struct {
 /// Jump to subroutine
 pub const Jsr = struct {
     pub fn op(ctx: *Ctx, comptime _: Size, dst: u32) void {
-        ctx.push(u32, ctx.cpu.pc);
+        ctx.push(null, u32, ctx.cpu.pc);
         ctx.cpu.pc = dst;
     }
 };
@@ -372,7 +372,7 @@ pub const Jsr = struct {
 /// Link and allocate
 pub const Link = struct {
     pub fn op(ctx: *Ctx, comptime _: Size, src: u16, dst: u32) u32 {
-        ctx.push(u32, dst);
+        ctx.push(null, u32, dst);
         const stack = ctx.cpu.an(7).*;
         ctx.cpu.an(7).* +%= int.extend(u32, src);
         return stack;
@@ -510,7 +510,7 @@ pub fn Subx(comptime minuend: enum { dst, src }) type {
 /// Push value onto the stack
 pub const Push = struct {
     pub fn op(ctx: *Ctx, comptime size: Size, dst: size.Int()) void {
-        ctx.push(size.Int(), dst);
+        ctx.push(null, size.Int(), dst);
     }
 };
 
@@ -585,12 +585,16 @@ pub fn Rotate(comptime add_cycles: bool, comptime dir: enum { r, l, rx, lx }) ty
 pub fn Return(comptime restore: enum { none, ccr, sr }) type {
     return struct {
         pub fn op(ctx: *Ctx, comptime _: Size) void {
+            const stack = switch (restore) {
+                .ccr, .none => 0,
+                .sr => 1,
+            };
             ctx.cpu.sr = switch (restore) {
-                .ccr => @bitCast(int.overwrite(@as(u16, @bitCast(ctx.cpu.sr)), ctx.pop(u8))),
-                .sr => ctx.pop(Cpu.Status),
+                .ccr => @bitCast(int.overwrite(@as(u16, @bitCast(ctx.cpu.sr)), ctx.pop(stack, u8))),
+                .sr => ctx.pop(stack, Cpu.Status),
                 .none => ctx.cpu.sr,
             };
-            ctx.cpu.pc = ctx.pop(u32);
+            ctx.cpu.pc = ctx.pop(stack, u32);
         }
     };
 }
@@ -669,7 +673,7 @@ pub const Tst = struct {
 pub const Unlink = struct {
     pub fn op(ctx: *Ctx, comptime _: Size, dst: u32) u32 {
         ctx.cpu.an(7).* = dst;
-        return ctx.pop(u32);
+        return ctx.pop(null, u32);
     }
 };
 
