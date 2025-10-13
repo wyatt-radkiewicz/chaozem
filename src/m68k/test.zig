@@ -132,6 +132,8 @@ const Env = struct {
     stack: []const u16 = &.{},
     data: []const u32 = &.{},
     addr: []const u32 = &.{},
+    usp: ?u32 = null,
+    ssp: ?u32 = null,
     flags: Flags = .{},
 
     /// Initialize the state of the cpu
@@ -155,8 +157,10 @@ const Env = struct {
         @memcpy(ram.words[ram.words.len - this.stack.len ..], this.stack);
 
         // Setup the special purpose registers
+        const stack = vectors.reset_sp - @as(u32, @intCast(this.stack.len * 2));
         cpu.pc = vectors.reset_pc;
-        cpu.a[7] = vectors.reset_sp - @as(u32, @intCast(this.stack.len * 2));
+        cpu.sp[0] = stack;
+        cpu.sp[1] = stack;
         this.flags.setup(cpu);
 
         // Setup the general purpose registers
@@ -169,6 +173,8 @@ const Env = struct {
 const Expect = struct {
     disasm: []const u8,
     clk: ?usize = null,
+    usp: ?u32 = null,
+    ssp: ?u32 = null,
     pc: ?u32 = null,
     ram: ?[]const u16 = null,
     data: ?[]const u32 = null,
@@ -194,6 +200,12 @@ const Expect = struct {
         }
         if (this.addr) |addr| {
             try std.testing.expectEqualSlices(u32, addr, cpu.a[0..addr.len]);
+        }
+        if (this.usp) |usp| {
+            try std.testing.expectEqual(usp, cpu.sp[0]);
+        }
+        if (this.ssp) |ssp| {
+            try std.testing.expectEqual(ssp, cpu.sp[1]);
         }
         if (this.flags) |flags| {
             try flags.check(cpu);

@@ -124,13 +124,14 @@
         },
         .{
             .env = .{
-                .code = .{0x4E50, 0xFFFE},
-                .addr = .{ 0x1122AA55 },
+                .code = .{ 0x4E50, 0xFFFE },
+                .addr = .{0x1122AA55},
             },
             .expect = .{
                 .disasm = "link.w a0,#-2",
                 .clk = 16,
-                .addr = .{ 0x1FFC, 0, 0, 0, 0, 0, 0, 0x1FFA },
+                .addr = .{0x1FFC},
+                .ssp = 0x1FFA,
                 .stack = .{ 0x0000, 0x1122, 0xAA55 },
             },
         },

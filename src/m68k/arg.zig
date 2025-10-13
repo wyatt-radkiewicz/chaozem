@@ -46,11 +46,11 @@ pub fn AddrReg(n: u4) type {
         }
 
         pub fn load(this: @This(), ctx: *Ctx, comptime _: Size, _: u16) u32 {
-            return ctx.cpu.a[this.n];
+            return ctx.cpu.an(this.n).*;
         }
 
         pub fn store(this: @This(), ctx: *Ctx, comptime _: Size, _: u16, data: u32) void {
-            ctx.cpu.a[this.n] = data;
+            ctx.cpu.an(this.n).* = data;
         }
 
         pub fn Disasm(comptime _: Size) type {
@@ -76,13 +76,13 @@ pub fn PostInc(n: u4) type {
         }
 
         pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
-            const addr = ctx.cpu.a[this.n];
-            ctx.cpu.a[this.n] +%= size.bits() / 8;
+            const addr = ctx.cpu.an(this.n).*;
+            ctx.cpu.an(this.n).* +%= size.bits() / 8;
             return ctx.read(size.Int(), addr);
         }
 
         pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
-            ctx.write(size.Int(), ctx.cpu.a[this.n], data);
+            ctx.write(size.Int(), ctx.cpu.an(this.n).*, data);
         }
 
         pub fn Disasm(comptime _: Size) type {
@@ -211,7 +211,7 @@ pub fn RegIdx(comptime reg_type: enum { data, addr }, at: u4) type {
         pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
             switch (reg_type) {
                 .data => ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], data),
-                .addr => ctx.cpu.a[this.n] = int.overwrite(ctx.cpu.a[this.n], data),
+                .addr => ctx.cpu.an(this.n).* = int.overwrite(ctx.cpu.an(this.n).*, data),
             }
         }
 
@@ -312,7 +312,7 @@ pub fn RegReg(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type 
             const reg = int.extract(u3, opcode, n);
             ctx.clk += delay.delay(size, mode);
             if (mode == 1) {
-                ctx.cpu.a[reg] -= size.bits() / 8;
+                ctx.cpu.an(reg).* -= size.bits() / 8;
             }
             return .{ .mode = mode, .reg = reg };
         }
@@ -320,14 +320,14 @@ pub fn RegReg(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type 
         pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
             return switch (this.mode) {
                 0 => @truncate(ctx.cpu.d[this.reg]),
-                1 => ctx.read(size.Int(), ctx.cpu.a[this.reg]),
+                1 => ctx.read(size.Int(), ctx.cpu.an(this.reg).*),
             };
         }
 
         pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
             switch (this.mode) {
                 0 => ctx.cpu.d[this.reg] = int.overwrite(ctx.cpu.d[this.reg], data),
-                1 => ctx.write(size.Int(), ctx.cpu.a[this.reg], data),
+                1 => ctx.write(size.Int(), ctx.cpu.an(this.reg).*, data),
             }
         }
 
@@ -377,7 +377,7 @@ pub fn Ea(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
         pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
             return switch (this.mode) {
                 .data_reg => @truncate(ctx.cpu.d[this.addr]),
-                .addr_reg => @truncate(ctx.cpu.a[this.addr]),
+                .addr_reg => @truncate(ctx.cpu.an(@truncate(this.addr)).*),
                 .immediate => ctx.fetch(size.Int()),
                 else => ctx.read(size.Int(), this.addr),
             };
@@ -386,7 +386,8 @@ pub fn Ea(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
         pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
             switch (this.mode) {
                 .data_reg => ctx.cpu.d[this.addr] = int.overwrite(ctx.cpu.d[this.addr], data),
-                .addr_reg => ctx.cpu.a[this.addr] = int.overwrite(ctx.cpu.a[this.addr], data),
+                .addr_reg => ctx.cpu.an(@truncate(this.addr)).* =
+                    int.overwrite(ctx.cpu.an(@truncate(this.addr)).*, data),
                 .immediate => {},
                 else => ctx.write(size.Int(), this.addr, data),
             }
@@ -465,8 +466,8 @@ pub fn Multiple(
                 .load => {
                     switch (mode) {
                         .post_inc => {
-                            mask.load(size, ctx, ctx.cpu.a[reg], .forward);
-                            ctx.cpu.a[reg] +%= @intCast(mask.count() * size.bits() / 8);
+                            mask.load(size, ctx, ctx.cpu.an(reg).*, .forward);
+                            ctx.cpu.an(reg).* +%= @intCast(mask.count() * size.bits() / 8);
                         },
                         .pre_dec => {}, // Pre-dec is only used when storing
                         else => mask.load(size, ctx, mode.calc(ctx, size, reg), .forward),
@@ -476,8 +477,8 @@ pub fn Multiple(
                     switch (mode) {
                         .post_inc => {}, // Post-inc is only used when loading
                         .pre_dec => {
-                            ctx.cpu.a[reg] -%= @intCast(mask.count() * size.bits() / 8);
-                            mask.store(size, ctx, ctx.cpu.a[reg], .forward);
+                            ctx.cpu.an(reg).* -%= @intCast(mask.count() * size.bits() / 8);
+                            mask.store(size, ctx, ctx.cpu.an(reg).*, .forward);
                         },
                         else => mask.store(size, ctx, mode.calc(ctx, size, reg), .forward),
                     }
@@ -539,7 +540,7 @@ pub fn Peripheral(comptime addr_n: u4) type {
         }
 
         pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
-            var addr = ctx.cpu.a[this.reg] +% this.disp;
+            var addr = ctx.cpu.an(this.reg).* +% this.disp;
             var val: size.Int() = 0;
             inline for (0..size.bits() / 8) |byte| {
                 val |= @as(size.Int(), ctx.read(u8, addr)) << size.bits() - 8 - byte * 8;
@@ -549,7 +550,7 @@ pub fn Peripheral(comptime addr_n: u4) type {
         }
 
         pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
-            var addr = ctx.cpu.a[this.reg] +% this.disp;
+            var addr = ctx.cpu.an(this.reg).* +% this.disp;
             inline for (0..size.bits() / 8) |byte| {
                 ctx.write(u8, addr, @truncate(data >> size.bits() - 8 - byte * 8));
                 addr += 2;

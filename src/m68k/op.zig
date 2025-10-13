@@ -316,9 +316,9 @@ pub fn Exg(comptime src_reg: enum { data, addr }, comptime dst_reg: enum { data,
             ctx.clk += 2;
             switch (@as(u2, @intFromEnum(src_reg)) << 1 | @intFromEnum(dst_reg)) {
                 0b00 => std.mem.swap(u32, &ctx.cpu.d[src], &ctx.cpu.d[dst]),
-                0b10 => std.mem.swap(u32, &ctx.cpu.a[src], &ctx.cpu.d[dst]),
-                0b01 => std.mem.swap(u32, &ctx.cpu.d[src], &ctx.cpu.a[dst]),
-                0b11 => std.mem.swap(u32, &ctx.cpu.a[src], &ctx.cpu.a[dst]),
+                0b10 => std.mem.swap(u32, ctx.cpu.an(src), &ctx.cpu.d[dst]),
+                0b01 => std.mem.swap(u32, &ctx.cpu.d[src], ctx.cpu.an(dst)),
+                0b11 => std.mem.swap(u32, ctx.cpu.an(src), ctx.cpu.an(dst)),
             }
         }
     };
@@ -373,8 +373,8 @@ pub const Jsr = struct {
 pub const Link = struct {
     pub fn op(ctx: *Ctx, comptime _: Size, src: u16, dst: u32) u32 {
         ctx.push(u32, dst);
-        const stack = ctx.cpu.a[7];
-        ctx.cpu.a[7] +%= int.extend(u32, src);
+        const stack = ctx.cpu.an(7).*;
+        ctx.cpu.an(7).* +%= int.extend(u32, src);
         return stack;
     }
 };
@@ -668,7 +668,7 @@ pub const Tst = struct {
 /// Unlink
 pub const Unlink = struct {
     pub fn op(ctx: *Ctx, comptime _: Size, dst: u32) u32 {
-        ctx.cpu.a[7] = dst;
+        ctx.cpu.an(7).* = dst;
         return ctx.pop(u32);
     }
 };

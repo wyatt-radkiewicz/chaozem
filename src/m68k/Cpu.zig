@@ -4,7 +4,9 @@ const bus_interface = @import("bus");
 /// Data registers
 d: [8]u32 = [1]u32{0} ** 8,
 /// Address registers
-a: [8]u32 = [1]u32{0} ** 8,
+a: [7]u32 = [1]u32{0} ** 7,
+/// Stack pointers (user, then supervisor)
+sp: [2]u32 = [1]u32{0} ** 2,
 /// Program counter
 pc: u32 = 0,
 /// Status register
@@ -35,3 +37,11 @@ pub const Status = packed struct {
     /// Trace level
     t: u2 = 0,
 };
+
+/// Get address register n
+pub inline fn an(this: *@This(), n: u3) *u32 {
+    return switch (n) {
+        7 => &this.sp[@intFromBool(this.sr.s)],
+        else => |x| &this.a[x],
+    };
+}

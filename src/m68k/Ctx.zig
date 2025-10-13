@@ -138,19 +138,19 @@ pub const Mode = enum {
     pub fn calc(this: @This(), ctx: *Ctx, comptime size: Size, reg: u3) u32 {
         return switch (this) {
             .data_reg, .addr_reg => reg,
-            .indirect => ctx.cpu.a[reg],
+            .indirect => ctx.cpu.an(reg).*,
             .post_inc => post_inc: {
-                const addr = ctx.cpu.a[reg];
-                ctx.cpu.a[reg] += size.bits() / 8;
+                const addr = ctx.cpu.an(reg).*;
+                ctx.cpu.an(reg).* += size.bits() / 8;
                 break :post_inc addr;
             },
             .pre_dec => pre_dec: {
-                ctx.cpu.a[reg] -= size.bits() / 8;
+                ctx.cpu.an(reg).* -= size.bits() / 8;
                 ctx.clk += 2;
-                break :pre_dec ctx.cpu.a[reg];
+                break :pre_dec ctx.cpu.an(reg).*;
             },
-            .addr_disp => ctx.cpu.a[reg] +% int.extend(u32, ctx.fetch(u16)),
-            .addr_idx => ctx.cpu.a[reg] +% ctx.fetch(Index).calc(ctx),
+            .addr_disp => ctx.cpu.an(reg).* +% int.extend(u32, ctx.fetch(u16)),
+            .addr_idx => ctx.cpu.an(reg).* +% ctx.fetch(Index).calc(ctx),
             .abs_word => int.extend(u32, ctx.fetch(u16)),
             .abs_long => ctx.fetch(u32),
             .pc_disp => ctx.cpu.pc +% int.extend(u32, ctx.fetch(u16)),
@@ -172,7 +172,7 @@ pub const Mode = enum {
             ctx.clk += 2;
             const reg = switch (this.m) {
                 0 => ctx.cpu.d[this.n],
-                1 => ctx.cpu.a[this.n],
+                1 => ctx.cpu.an(this.n).*,
             };
             return switch (this.size) {
                 0 => int.extend(u32, @as(u16, @truncate(reg))),
@@ -496,16 +496,16 @@ pub inline fn write(this: *Ctx, comptime Data: type, addr: u32, data: Data) void
 pub inline fn push(this: *Ctx, comptime Data: type, data: Data) void {
     const bits = @bitSizeOf(Data);
     const Push = std.meta.Int(.unsigned, @max(16, bits));
-    this.cpu.a[7] -%= @sizeOf(Push);
-    this.write(Push, this.cpu.a[7], @as(std.meta.Int(.unsigned, bits), @bitCast(data)));
+    this.cpu.an(7).* -%= @sizeOf(Push);
+    this.write(Push, this.cpu.an(7).*, @as(std.meta.Int(.unsigned, bits), @bitCast(data)));
 }
 
 /// Pop data off the stack
 pub inline fn pop(this: *Ctx, comptime Data: type) Data {
     const bits = @bitSizeOf(Data);
     const Push = std.meta.Int(.unsigned, @max(16, bits));
-    const data = this.read(Push, this.cpu.a[7]);
-    this.cpu.a[7] +%= @sizeOf(Push);
+    const data = this.read(Push, this.cpu.an(7).*);
+    this.cpu.an(7).* +%= @sizeOf(Push);
     return @bitCast(@as(std.meta.Int(.unsigned, bits), @truncate(data)));
 }
 
