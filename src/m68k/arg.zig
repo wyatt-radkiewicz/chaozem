@@ -5,7 +5,7 @@ const int = @import("int");
 const Ctx = @import("Ctx.zig");
 const Size = Ctx.Size;
 
-/// Data register source or
+/// Data register source
 pub fn DataReg(n: u4) type {
     return struct {
         n: u3,
@@ -128,6 +128,32 @@ pub const Status = struct {
                     .w => "sr",
                     else => @compileError("Expected byte or word with status register disasm!"),
                 }});
+            }
+        };
+    }
+};
+
+/// Access to the user stack pointer
+pub const Usp = struct {
+    pub fn decode(_: *Ctx, comptime _: Size, _: u16) @This() {
+        return .{};
+    }
+
+    pub fn load(_: @This(), ctx: *Ctx, comptime _: Size, _: u16) u32 {
+        return ctx.cpu.sp[0];
+    }
+
+    pub fn store(_: @This(), ctx: *Ctx, comptime _: Size, _: u16, data: u32) void {
+        ctx.cpu.sp[0] = data;
+    }
+
+    pub fn Disasm(comptime _: Size) type {
+        return struct {
+            reader: *std.io.Reader,
+            opcode: u16,
+
+            pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+                try writer.print("usp", .{});
             }
         };
     }

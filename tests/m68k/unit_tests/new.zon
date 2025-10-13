@@ -1,0 +1,27 @@
+.{
+    .vectors = .{},
+    .tests = .{
+        .{
+            .env = .{
+                .code = .{0x4E68},
+                .addr = .{ 0x1234 },
+            },
+            .expect = .{
+                .disasm = "move.l usp,a0",
+                .addr = .{ 0x2000 },
+                .clk = 4,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4E60},
+                .addr = .{ 0x1234 },
+            },
+            .expect = .{
+                .disasm = "move.l a0,usp",
+                .usp = 0x1234,
+                .clk = 4,
+            },
+        },
+    },
+}
