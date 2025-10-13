@@ -609,6 +609,13 @@ pub fn Scc(comptime cond_penalty: usize) type {
     };
 }
 
+/// Address subtraction operation
+pub const Suba = struct {
+    pub fn op(_: *Ctx, comptime size: Size, src: size.Int(), dst: u32) u32 {
+        return int.extend(u32, src) -% dst;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {
