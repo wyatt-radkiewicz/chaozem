@@ -81,5 +81,27 @@
                 .flags = .{ .n = true, .z = false, .v = false, .c = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x4A40},
+                .data = .{0x0000},
+            },
+            .expect = .{
+                .disasm = "tst.w d0",
+                .clk = 4,
+                .flags = .{ .c = false, .v = false, .z = true, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4A40},
+                .data = .{0x8000},
+            },
+            .expect = .{
+                .disasm = "tst.w d0",
+                .clk = 4,
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
     },
 }
