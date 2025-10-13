@@ -95,6 +95,7 @@ const Vectors = struct {
     divzero: u32 = 0x200,
     chk: u32 = 0x200,
     trap: u32 = 0x200,
+    trapv: u32 = 0x200,
 };
 
 /// Cpu status flags

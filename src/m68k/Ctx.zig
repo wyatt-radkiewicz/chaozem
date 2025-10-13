@@ -250,6 +250,7 @@ pub const Vector = enum(u6) {
     divzero = 5,
     chk = 6,
     trap = 32,
+    trapv = 7,
     _,
 
     /// Get the address of the vector in the memory map

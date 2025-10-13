@@ -646,6 +646,15 @@ pub const Trap = struct {
     }
 };
 
+/// Overflow exception handler
+pub const Trapv = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size) void {
+        if (ctx.cpu.sr.v) {
+            Ctx.Vector.trapv.handle(ctx);
+        }
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {
