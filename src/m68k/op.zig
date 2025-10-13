@@ -665,6 +665,14 @@ pub const Tst = struct {
     }
 };
 
+/// Unlink
+pub const Unlink = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, dst: u32) u32 {
+        ctx.cpu.a[7] = dst;
+        return ctx.pop(u32);
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

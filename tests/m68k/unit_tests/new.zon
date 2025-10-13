@@ -180,5 +180,17 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x4E58},
+                .addr = .{0x1FFC},
+                .stack = .{ 0x0000, 0x0001, 0x0002, 0x0003 },
+            },
+            .expect = .{
+                .disasm = "unlk.w a0",
+                .addr = .{0x00020003},
+                .clk = 12,
+            },
+        },
     },
 }

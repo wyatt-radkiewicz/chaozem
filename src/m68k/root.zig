@@ -1228,4 +1228,13 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Tst,
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+    
+    // Unlink
+    isa.Instr{
+        .name = "unlk",
+        .enc = .init("0100111001011xxx"),
+        .dst = arg.AddrReg(0),
+        .op = op.Unlink,
+        .size = .{ .fixed = .w },
+    },
 });
