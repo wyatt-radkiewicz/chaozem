@@ -1219,4 +1219,13 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("0100111001110110"),
         .op = op.Trapv,
     },
+
+    // Test an operand
+    isa.Instr{
+        .name = "tst",
+        .enc = .init("01001010xxxxxxxx"),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Tst,
+        .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
 });

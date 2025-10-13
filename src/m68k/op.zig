@@ -655,6 +655,16 @@ pub const Trapv = struct {
     }
 };
 
+/// Test the operand
+pub const Tst = struct {
+    pub fn op(ctx: *Ctx, comptime size: Size, src: size.Int()) void {
+        ctx.cpu.sr.n = int.negative(src);
+        ctx.cpu.sr.z = src == 0;
+        ctx.cpu.sr.c = false;
+        ctx.cpu.sr.v = false;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {
