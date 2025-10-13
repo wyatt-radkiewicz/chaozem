@@ -2,6 +2,7 @@ const std = @import("std");
 
 const int = @import("int");
 
+const Cpu = @import("Cpu.zig");
 const Ctx = @import("Ctx.zig");
 const Size = Ctx.Size;
 
@@ -568,6 +569,20 @@ pub fn Rotate(comptime add_cycles: bool, comptime dir: enum { r, l, rx, lx }) ty
                 .lx => @truncate(result >> 1),
                 .r, .l => result,
             };
+        }
+    };
+}
+
+/// Return
+pub fn Return(comptime restore: enum { none, ccr, sr }) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime _: Size) void {
+            ctx.cpu.sr = switch (restore) {
+                .ccr => @bitCast(int.overwrite(@as(u16, @bitCast(ctx.cpu.sr)), ctx.pop(u8))),
+                .sr => ctx.pop(Cpu.Status),
+                .none => ctx.cpu.sr,
+            };
+            ctx.cpu.pc = ctx.pop(u32);
         }
     };
 }

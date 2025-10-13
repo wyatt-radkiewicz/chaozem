@@ -134,5 +134,32 @@
                 .clk = 16,
             },
         },
+        // Return and restore condition codes
+        .{
+            .env = .{
+                .code = .{0x4E77},
+                .stack = .{ 0x0001, 0x0000, 0x0200 },
+            },
+            .expect = .{
+                .disasm = "rtr",
+                .pc = 0x100,
+                .flags = .{ .x = false, .n = false, .z = false, .v = false, .c = true },
+                .stack = .{},
+                .clk = 20,
+            },
+        },
+        // Return from subroutine
+        .{
+            .env = .{
+                .code = .{0x4E75},
+                .stack = .{ 0x0000, 0x0200 },
+            },
+            .expect = .{
+                .disasm = "rts",
+                .pc = 0x100,
+                .stack = .{},
+                .clk = 16,
+            },
+        },
     },
 }

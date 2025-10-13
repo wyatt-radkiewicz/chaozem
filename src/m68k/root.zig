@@ -607,7 +607,6 @@ const m68k_isa = isa.Isa(&.{
         .name = "illegal",
         .enc = .init("0100101011111100"),
         .op = op.Illegal,
-        .size = .{ .fixed = .none },
     },
 
     // Jump
@@ -623,7 +622,6 @@ const m68k_isa = isa.Isa(&.{
             .pc_idx = 4,
         }) }),
         .op = op.Jmp,
-        .size = .{ .fixed = .none },
     },
 
     // Jump to subroutine
@@ -639,7 +637,6 @@ const m68k_isa = isa.Isa(&.{
             .pc_idx = 4,
         }) }),
         .op = op.Jsr,
-        .size = .{ .fixed = .none },
     },
 
     // Load effective address
@@ -860,7 +857,6 @@ const m68k_isa = isa.Isa(&.{
     isa.Instr{
         .name = "nop",
         .enc = .init("0100111001110001"),
-        .size = .{ .fixed = .none },
     },
 
     // Bitwise not
@@ -1047,5 +1043,21 @@ const m68k_isa = isa.Isa(&.{
         .dst = arg.DataReg(0),
         .op = op.Rotate(true, .lx),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
+    },
+
+    // Return and restore condition codes
+    isa.Instr{
+        .name = "rtr",
+        .enc = .init("0100111001110111"),
+        .op = op.Return(.ccr),
+        .clk = 4,
+    },
+
+    // Return from subroutine
+    isa.Instr{
+        .name = "rts",
+        .enc = .init("0100111001110101"),
+        .op = op.Return(.none),
+        .clk = 4,
     },
 });
