@@ -1204,4 +1204,12 @@ const m68k_isa = isa.Isa(&.{
         .clk = 2,
         .size = .{ .fixed = .b },
     },
+    
+    // Trap
+    isa.Instr{
+        .name = "trap",
+        .enc = .init("010011100100xxxx"),
+        .src = arg.Opcode(u4, 0),
+        .op = op.Trap,
+    },
 });

@@ -639,6 +639,13 @@ pub const Tas = struct {
     }
 };
 
+/// Vector instruction handler
+pub const Trap = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, vector: u4) void {
+        Ctx.Vector.trapn(vector).handle(ctx);
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

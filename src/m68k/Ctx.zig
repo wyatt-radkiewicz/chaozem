@@ -243,12 +243,13 @@ pub const Mode = enum {
 };
 
 /// Processor vectors
-pub const Vector = enum(u5) {
+pub const Vector = enum(u6) {
     reset_sp = 0,
     reset_pc = 1,
     illegal = 4,
     divzero = 5,
     chk = 6,
+    trap = 32,
     _,
 
     /// Get the address of the vector in the memory map
@@ -256,33 +257,26 @@ pub const Vector = enum(u5) {
         return @as(u32, @intFromEnum(this)) * @sizeOf(u32);
     }
 
-    /// Handle exception
-    pub fn handle(this: @This(), ctx: *Ctx) void {
-        switch (this) {
-            .illegal => Group.@"1".handle(this, ctx, 10),
-            .divzero => Group.@"2".handle(this, ctx, 8),
-            .chk => Group.@"2".handle(this, ctx, 12),
-            else => {},
-        }
+    /// Get a trap vector
+    pub fn trapn(vector: u4) @This() {
+        return @enumFromInt(@intFromEnum(@This().trap) + vector);
     }
 
-    /// Exception group
-    const Group = enum {
-        @"1",
-        @"2",
+    /// Handle exception
+    pub fn handle(this: @This(), ctx: *Ctx) void {
+        // Each exception takes a different amount of time
+        ctx.clk += switch (this) {
+            .illegal => 10,
+            .divzero => 8,
+            .chk => 12,
+            else => 10,
+        };
 
-        /// Handle an exception in that exception group
-        pub fn handle(this: @This(), vector: Vector, ctx: *Ctx, extra_clks: usize) void {
-            ctx.clk += extra_clks;
-            switch (this) {
-                .@"1", .@"2" => {
-                    ctx.push(u32, ctx.cpu.pc);
-                    ctx.push(Cpu.Status, ctx.cpu.sr);
-                    ctx.cpu.pc = ctx.read(u32, vector.addr());
-                },
-            }
-        }
-    };
+        // Push the program counter, status register, and jump to the vector
+        ctx.push(u32, ctx.cpu.pc);
+        ctx.push(Cpu.Status, ctx.cpu.sr);
+        ctx.cpu.pc = ctx.read(u32, this.addr());
+    }
 };
 
 /// Conditionals
