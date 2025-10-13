@@ -595,6 +595,20 @@ pub fn Return(comptime restore: enum { none, ccr, sr }) type {
     };
 }
 
+/// Return 0x00 on false, 0xff on true
+pub fn Scc(comptime cond_penalty: usize) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime size: Size, src: Ctx.Cond, _: size.Int()) size.Int() {
+            if (src.value(ctx.cpu.sr)) {
+                ctx.clk += cond_penalty;
+                return std.math.maxInt(size.Int());
+            } else {
+                return 0;
+            }
+        }
+    };
+}
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

@@ -170,14 +170,38 @@
         },
         .{
             .env = .{
-                .code = .{0x4870, 0x0002},
+                .code = .{ 0x4870, 0x0002 },
                 .data = .{0x0001},
                 .addr = .{0xF00F0000},
             },
             .expect = .{
                 .disasm = "pea.l (#2,a0,d0.w)",
-                .stack = .{0xF00F, 0x0003},
+                .stack = .{ 0xF00F, 0x0003 },
                 .clk = 20,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x57C0},
+                .data = .{0xFF00},
+                .flags = .{ .z = true },
+            },
+            .expect = .{
+                .disasm = "seq.b d0",
+                .data = .{0xFFFF},
+                .clk = 6,
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x57C1},
+                .data = .{ 0, 0xFFFF },
+                .flags = .{ .z = false },
+            },
+            .expect = .{
+                .disasm = "seq.b d1",
+                .data = .{ 0, 0xFF00 },
+                .clk = 4,
             },
         },
     },

@@ -1070,4 +1070,24 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Sbcd(.dst),
         .size = .{ .fixed = .b },
     },
+
+    // Set according to condition
+    isa.Instr{
+        .name = "s",
+        .enc = .init("0101xxxx11xxxxxx"),
+        .src = arg.Opcode(Ctx.Cond, 8),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Scc(0),
+        .size = .{ .fixed = .b },
+        .disasm = &.{ .name, .src, .size, .space, .dst },
+    },
+    isa.Instr{
+        .name = "s",
+        .enc = .init("0101xxxx11000xxx"),
+        .src = arg.Opcode(Ctx.Cond, 8),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Scc(2),
+        .size = .{ .fixed = .b },
+        .disasm = &.{ .name, .src, .size, .space, .dst },
+    },
 });
