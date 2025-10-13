@@ -23,7 +23,15 @@ pub fn exception(vector: Ctx.Vector, cpu: *Cpu, bus: *Bus) usize {
 
 /// Run one instruction
 pub fn step(cpu: *Cpu, bus: *Bus) usize {
+    // If the cpu is stopped, don't emulate anything
+    if (cpu.stop) {
+        return 0;
+    }
+
+    // Setup the execution context
     var ctx = Ctx{ .cpu = cpu, .bus = bus };
+
+    // Fetch the opcode and either run the instruction, or illegal handler
     const opcode = ctx.fetch(u16);
     if (m68k_isa.runner(opcode)) |pfn| {
         pfn(&ctx, opcode);
@@ -1254,5 +1262,22 @@ const m68k_isa = isa.Isa(&.{
         .src = arg.AddrReg(0),
         .dst = arg.Usp,
         .size = .{ .fixed = .l },
+    },
+
+    // Reset
+    isa.Instr{
+        .name = "reset",
+        .enc = .init("0100111001110000"),
+        .clk = 128,
+    },
+
+    // Stop
+    isa.Instr{
+        .name = "stop",
+        .enc = .init("0100111001110010"),
+        .src = arg.Imm(.{}),
+        .op = op.Stop,
+        .size = .{ .fixed = .w },
+        .disasm = &.{ .name, .space, .src },
     },
 });

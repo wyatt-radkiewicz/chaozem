@@ -673,6 +673,17 @@ pub const Unlink = struct {
     }
 };
 
+/// Stop the processor
+pub const Stop = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, src: u16) void {
+        ctx.cpu.sr = @bitCast(src);
+        ctx.cpu.stop = true;
+
+        // For some reason, the timing document states no cycles for the loading of the status reg.
+        ctx.clk -= 4;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

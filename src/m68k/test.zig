@@ -181,6 +181,7 @@ const Expect = struct {
     addr: ?[]const u32 = null,
     stack: ?[]const u16 = null,
     flags: ?Flags = null,
+    stop: ?bool = null,
 
     /// Check the state of the runner
     fn check(this: @This(), vectors: Vectors, ram: Ram, cpu: Cpu, cycles: usize) !void {
@@ -206,6 +207,9 @@ const Expect = struct {
         }
         if (this.ssp) |ssp| {
             try std.testing.expectEqual(ssp, cpu.sp[1]);
+        }
+        if (this.stop) |stop| {
+            try std.testing.expectEqual(stop, cpu.stop);
         }
         if (this.flags) |flags| {
             try flags.check(cpu);

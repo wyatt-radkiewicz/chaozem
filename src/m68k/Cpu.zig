@@ -11,6 +11,8 @@ sp: [2]u32 = [1]u32{0} ** 2,
 pc: u32 = 0,
 /// Status register
 sr: Status = .{},
+/// Whether the processor is stopped
+stop: bool = false,
 
 /// M68K processor status flags
 pub const Status = packed struct {
