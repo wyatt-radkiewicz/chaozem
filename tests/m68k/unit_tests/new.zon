@@ -76,5 +76,29 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x4840},
+                .data = .{0xFFFF0000},
+            },
+            .expect = .{
+                .disasm = "swap.w d0",
+                .clk = 4,
+                .data = .{0x0000FFFF},
+                .flags = .{ .c = false, .v = false, .z = false, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4841},
+                .data = .{ 0, 0x0000FFFF },
+            },
+            .expect = .{
+                .disasm = "swap.w d1",
+                .clk = 4,
+                .data = .{ 0, 0xFFFF0000 },
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
     },
 }

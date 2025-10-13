@@ -616,6 +616,18 @@ pub const Suba = struct {
     }
 };
 
+/// Swap register halves
+pub const Swap = struct {
+    pub fn op(ctx: *Ctx, comptime _: Size, n: u3) void {
+        const result = ctx.cpu.d[n] >> 16 | ctx.cpu.d[n] << 16;
+        ctx.cpu.sr.n = int.negative(result);
+        ctx.cpu.sr.z = result == 0;
+        ctx.cpu.sr.c = false;
+        ctx.cpu.sr.v = false;
+        ctx.cpu.d[n] = result;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

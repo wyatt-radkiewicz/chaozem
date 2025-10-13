@@ -1178,4 +1178,13 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Subx(.dst),
         .size = .{ .dyn = .{ .at = 6, .b = 0b00, .w = 0b01, .l = 0b10 } },
     },
+
+    // Swap register halves
+    isa.Instr{
+        .name = "swap",
+        .enc = .init("0100100001000xxx"),
+        .dst = arg.RegIdx(.data, 0),
+        .op = op.Swap,
+        .size = .{ .fixed = .w },
+    },
 });
