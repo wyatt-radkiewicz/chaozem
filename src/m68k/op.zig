@@ -628,6 +628,17 @@ pub const Swap = struct {
     }
 };
 
+/// Test and set
+pub const Tas = struct {
+    pub fn op(ctx: *Ctx, comptime size: Size, dst: size.Int()) size.Int() {
+        ctx.cpu.sr.n = int.negative(dst);
+        ctx.cpu.sr.z = dst == 0;
+        ctx.cpu.sr.c = false;
+        ctx.cpu.sr.v = false;
+        return dst | 1 << size.bits() - 1;
+    }
+};
+
 /// Do an arithmatic operation and get the results
 fn Arith(comptime size: Size) type {
     return struct {

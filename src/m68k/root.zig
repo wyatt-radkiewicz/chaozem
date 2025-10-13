@@ -1187,4 +1187,21 @@ const m68k_isa = isa.Isa(&.{
         .op = op.Swap,
         .size = .{ .fixed = .w },
     },
+
+    // Test and set an operand
+    isa.Instr{
+        .name = "tas",
+        .enc = .init("0100101011000xxx"),
+        .dst = arg.DataReg(0),
+        .op = op.Tas,
+        .size = .{ .fixed = .b },
+    },
+    isa.Instr{
+        .name = "tas",
+        .enc = .init("0100101011xxxxxx"),
+        .dst = arg.Ea(3, 0, .{}),
+        .op = op.Tas,
+        .clk = 2,
+        .size = .{ .fixed = .b },
+    },
 });

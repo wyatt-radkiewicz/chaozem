@@ -100,5 +100,30 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x4AC0},
+                .data = .{0x00},
+            },
+            .expect = .{
+                .disasm = "tas.b d0",
+                .clk = 4,
+                .data = .{0x80},
+                .flags = .{ .c = false, .v = false, .z = true, .n = false },
+            },
+        },
+        .{
+            .env = .{
+                .code = .{0x4AD0},
+                .addr = .{0x1000},
+                .ram = .{0x8000},
+            },
+            .expect = .{
+                .disasm = "tas.b (a0)",
+                .clk = 14,
+                .ram = .{0x8000},
+                .flags = .{ .c = false, .v = false, .z = false, .n = true },
+            },
+        },
     },
 }
