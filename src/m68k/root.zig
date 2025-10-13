@@ -826,7 +826,7 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("0100100000xxxxxx"),
         .src = arg.Const(u8, 0),
         .dst = arg.Ea(3, 0, .{ .b = .initDefault(0, .{ .data_reg = 2 }) }),
-        .op = op.Sbcd,
+        .op = op.Sbcd(.src),
         .size = .{ .fixed = .b },
         .disasm = &.{ .name, .size, .space, .dst },
     },
@@ -1059,5 +1059,15 @@ const m68k_isa = isa.Isa(&.{
         .enc = .init("0100111001110101"),
         .op = op.Return(.none),
         .clk = 4,
+    },
+
+    // Subtract binary coded decimal
+    isa.Instr{
+        .name = "sbcd",
+        .enc = .init("1000xxx10000xxxx"),
+        .src = arg.RegReg(3, 0, .{}),
+        .dst = arg.RegReg(3, 9, .{ .b = .{ 2, 2 } }),
+        .op = op.Sbcd(.dst),
+        .size = .{ .fixed = .b },
     },
 });

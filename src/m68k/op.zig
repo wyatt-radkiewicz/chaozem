@@ -439,29 +439,37 @@ pub const Mulu = struct {
 };
 
 /// Subtract binary decimal with extend
-pub const Sbcd = struct {
-    pub fn op(ctx: *Ctx, comptime _: Size, src: u8, dst: u8) u8 {
-        var result = Ctx.frombcd(src);
-        ctx.cpu.sr.c = false;
+pub fn Sbcd(comptime minuend: enum { dst, src }) type {
+    return struct {
+        pub fn op(ctx: *Ctx, comptime _: Size, src: u8, dst: u8) u8 {
+            var result = Ctx.frombcd(switch (minuend) {
+                .dst => dst,
+                .src => src,
+            });
+            ctx.cpu.sr.c = false;
 
-        result -%= Ctx.frombcd(dst);
-        if (result > 99) {
-            result -= 156;
-            ctx.cpu.sr.c = true;
+            result -%= Ctx.frombcd(switch (minuend) {
+                .dst => src,
+                .src => dst,
+            });
+            if (result > 99) {
+                result -= 156;
+                ctx.cpu.sr.c = true;
+            }
+
+            result -%= @intFromBool(ctx.cpu.sr.x);
+            if (result > 99) {
+                result -= 156;
+                ctx.cpu.sr.c = true;
+            }
+
+            result = Ctx.tobcd(result)[0];
+            ctx.cpu.sr.x = ctx.cpu.sr.c;
+            ctx.cpu.sr.z = @intFromBool(ctx.cpu.sr.z) & @intFromBool(result == 0) == 1;
+            return result;
         }
-
-        result -%= @intFromBool(ctx.cpu.sr.x);
-        if (result > 99) {
-            result -= 156;
-            ctx.cpu.sr.c = true;
-        }
-
-        result = Ctx.tobcd(result)[0];
-        ctx.cpu.sr.x = ctx.cpu.sr.c;
-        ctx.cpu.sr.z = @intFromBool(ctx.cpu.sr.z) & @intFromBool(result == 0) == 1;
-        return result;
-    }
-};
+    };
+}
 
 /// Normal subtraction operation
 pub fn Sub(comptime minuend: enum { dst, src }) type {

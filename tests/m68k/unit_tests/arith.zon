@@ -419,5 +419,18 @@
                 .flags = .{ .c = true, .v = false, .z = false, .n = true, .x = true },
             },
         },
+        .{
+            .env = .{
+                .code = .{0x8101},
+                .data = .{ 0x54, 0x33 },
+                .flags = .{ .x = true },
+            },
+            .expect = .{
+                .disasm = "sbcd.b d1,d0",
+                .data = .{0x20},
+                .clk = 6,
+                .flags = .{ .c = false, .z = false, .x = false },
+            },
+        },
     },
 }
