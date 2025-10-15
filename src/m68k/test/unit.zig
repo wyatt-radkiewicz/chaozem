@@ -1,9 +1,8 @@
 const std = @import("std");
 
 const bus_interface = @import("bus");
-
-const Cpu = @import("Cpu.zig");
-const m68k = @import("root.zig");
+const config = @import("config");
+const m68k = @import("m68k");
 
 const Bus = bus_interface.Bus(m68k.bus_width);
 const Device = bus_interface.Device(m68k.bus_width);
@@ -26,7 +25,7 @@ const Test = struct {
         const err_ctx = .{ group, this.expect.disasm };
         var rom = Rom{};
         var ram = Ram{};
-        var cpu = Cpu{};
+        var cpu = m68k.Cpu{};
         this.env.setup(vectors, &cpu, &rom, &ram);
 
         // Create a bus interface to access the environment
@@ -107,7 +106,7 @@ const Flags = struct {
     x: ?bool = null,
 
     /// Initialize the state of a cpu
-    fn setup(this: @This(), cpu: *Cpu) void {
+    fn setup(this: @This(), cpu: *m68k.Cpu) void {
         cpu.sr.c = this.c orelse cpu.sr.c;
         cpu.sr.v = this.v orelse cpu.sr.v;
         cpu.sr.z = this.z orelse cpu.sr.z;
@@ -116,7 +115,7 @@ const Flags = struct {
     }
 
     /// Check the state of the cpu to see if it matches
-    fn check(this: @This(), cpu: Cpu) !void {
+    fn check(this: @This(), cpu: m68k.Cpu) !void {
         try std.testing.expectEqual(this.c orelse cpu.sr.c, cpu.sr.c);
         try std.testing.expectEqual(this.v orelse cpu.sr.v, cpu.sr.v);
         try std.testing.expectEqual(this.z orelse cpu.sr.z, cpu.sr.z);
@@ -137,7 +136,7 @@ const Env = struct {
     flags: Flags = .{},
 
     /// Initialize the state of the cpu
-    fn setup(this: @This(), vectors: Vectors, cpu: *Cpu, rom: *Rom, ram: *Ram) void {
+    fn setup(this: @This(), vectors: Vectors, cpu: *m68k.Cpu, rom: *Rom, ram: *Ram) void {
         // Inject the vectors into the rom
         inline for (comptime std.meta.fieldNames(m68k.Vector)) |vector| {
             if (@hasField(Vectors, vector)) {
@@ -184,7 +183,7 @@ const Expect = struct {
     stop: ?bool = null,
 
     /// Check the state of the runner
-    fn check(this: @This(), vectors: Vectors, ram: Ram, cpu: Cpu, cycles: usize) !void {
+    fn check(this: @This(), vectors: Vectors, ram: Ram, cpu: m68k.Cpu, cycles: usize) !void {
         try std.testing.expectEqual(this.clk orelse cycles, cycles);
         if (this.pc) |pc| {
             try std.testing.expectEqual(vectors.reset_pc + pc, cpu.pc);
@@ -259,7 +258,7 @@ const Ram = struct {
 
 test "m68k tests" {
     // Run each test
-    var dir = try std.fs.cwd().openDir("tests/m68k/unit_tests", .{ .iterate = true });
+    var dir = try std.fs.cwd().openDir(config.tests_path, .{ .iterate = true });
     defer dir.close();
     var iter = dir.iterate();
     while (try iter.next()) |entry| {

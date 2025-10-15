@@ -8,13 +8,17 @@ pub const Output = extern struct {
     result: u32,
 };
 
-pub export fn main(input: *const Input, output: *Output) void {
+fn fib(n: u32) u32 {
     var a: u32 = 0;
     var b: u32 = 1;
-    for (0..input.to) |_| {
+    for (0..n) |_| {
         const next = a +% b;
         a = b;
         b = next;
     }
-    output.result = a;
+    return a;
+}
+
+pub export fn main(input: *const Input, output: *Output) void {
+    output.result = fib(input.to);
 }
