@@ -438,7 +438,7 @@ pub const RegMask = packed struct {
 pub inline fn fetch(this: *Ctx, comptime Data: type) Data {
     const fetch_width = @max(16, @bitSizeOf(Data));
     const data = this.read(std.meta.Int(.unsigned, fetch_width), this.cpu.pc);
-    this.cpu.pc += fetch_width / 8;
+    this.cpu.pc +%= fetch_width / 8;
     return @bitCast(@as(std.meta.Int(.unsigned, @bitSizeOf(Data)), @truncate(data)));
 }
 

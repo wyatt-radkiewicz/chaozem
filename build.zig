@@ -6,19 +6,22 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // M68k integration test compilation target info
-    const m68k_target = b.resolveTargetQuery(.{
+    const m68k_query = std.Target.Query{
         .cpu_arch = .m68k,
         .cpu_model = .baseline,
         .os_tag = .freestanding,
         .abi = .eabi,
-    });
-    _ = m68k_target; // autofix
+    };
     const m68k_integration_test_path = b.option(
         []const u8,
         "m68k-integration-tests",
         "M68k integration tests directory",
     ) orelse b.pathJoin(&.{ test_dir, m68k_mod_name, "integration" });
-    _ = m68k_integration_test_path; // autofix
+    const m68k_integration_linker_path = b.option(
+        []const u8,
+        "m68k-integration-linker",
+        "Path to a m68k compatible linker",
+    );
     const m68k_unit_test_path = b.option(
         []const u8,
         "m68k-unit-tests",
@@ -28,10 +31,9 @@ pub fn build(b: *std.Build) void {
     // Major top level steps
     const install_step = b.getInstallStep();
     const test_step = b.step("test", "Run tests");
-    const docs_step = b.step("docs", "Emit documentation");
+    _ = b.step("docs", "Emit documentation");
     const fmt_step = b.step("fmt", "Check formatting");
     const clean_step = b.step("clean", "Clean artifacts");
-    _ = docs_step; // autofix
 
     // Compile the "int" module and tests
     const int_mod = b.createModule(.{
@@ -123,16 +125,139 @@ pub fn build(b: *std.Build) void {
     const m68k_unit_test_run = b.addRunArtifact(m68k_unit_test_exe);
     test_step.dependOn(&m68k_unit_test_run.step);
 
+    // This tells us if we have m68k compilation support
+    const have_m68k_support = get_m68k_support: {
+        _ = std.zig.system.resolveTargetQuery(m68k_query) catch {
+            std.log.warn("Unable to resolve m68k target, m68k integration tests disabled.", .{});
+            break :get_m68k_support false;
+        };
+        if (m68k_integration_linker_path == null) {
+            std.log.warn("No linker set for m68k target, m68k integration tests disabled.", .{});
+            break :get_m68k_support false;
+        } else {
+            break :get_m68k_support true;
+        }
+    };
+    if (have_m68k_support) {
+        // Create the resolved target adn the linker path
+        const m68k_target = b.resolveTargetQuery(m68k_query);
+        const linker_path = m68k_integration_linker_path orelse unreachable;
+
+        // Each integration test is its own executable since each one is compiled with different code
+        // and interfaces. This will create a module for each test and return it
+        var m68k_integration_test_dir = std.fs.cwd().openDir(
+            m68k_integration_test_path,
+            .{ .iterate = true },
+        ) catch @panic("Couldn't open integration test directory");
+        defer m68k_integration_test_dir.close();
+        var m68k_integration_test_iter = m68k_integration_test_dir.iterate();
+        while (m68k_integration_test_iter.next() catch @panic("Error iterating")) |entry| {
+            // Only get source files (assume one for each test)
+            if (!std.mem.eql(u8, ".zig", std.fs.path.extension(entry.name))) {
+                continue;
+            }
+
+            // The name of the test we're running
+            const test_name = std.fs.path.stem(entry.name);
+
+            // Create the "m68k" integration tester
+            const test_mod = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .root_source_file = b.path(b.pathJoin(&.{
+                    src_dir,
+                    m68k_mod_name,
+                    "test",
+                    "integration.zig",
+                })),
+            });
+            test_mod.addImport(m68k_mod_name, m68k_mod);
+            test_mod.addImport(bus_mod_name, bus_mod);
+
+            // Add this to the parent testing step
+            const test_mod_exe = b.addTest(.{
+                .name = b.fmt("m68k integration \"{s}\" test", .{test_name}),
+                .root_module = test_mod,
+            });
+            const test_mod_run = b.addRunArtifact(test_mod_exe);
+            test_step.dependOn(&test_mod_run.step);
+
+            // The root source file and data file of the actual specific test to compile
+            const test_ld = b.path(b.pathJoin(&.{ m68k_integration_test_path, "linker.ld" }));
+            const test_zig = b.path(b.pathJoin(&.{ m68k_integration_test_path, entry.name }));
+            const test_zon = b.path(b.pathJoin(&.{
+                m68k_integration_test_path,
+                b.fmt("{s}.zon", .{test_name}),
+            }));
+            test_mod.addAnonymousImport("input", .{
+                .root_source_file = test_zon,
+            });
+
+            // Compile the host version of the test
+            const host_mod = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .root_source_file = test_zig,
+            });
+            test_mod.addImport("host", host_mod);
+
+            // Compile the target version of the test
+            const target_mod = b.createModule(.{
+                .target = m68k_target,
+                .optimize = .ReleaseSmall,
+                .omit_frame_pointer = true,
+                .unwind_tables = .none,
+                .root_source_file = test_zig,
+            });
+            const target_obj = b.addObject(.{
+                .name = test_name,
+                .root_module = target_mod,
+            });
+
+            // Now that we have an object we'll link it with the provided linker.
+            // This is a work around because as of now, Zig can not link m68k files
+            const linker = b.addSystemCommand(&.{ linker_path, "-T" });
+            linker.addFileArg(test_ld);
+            linker.addFileArg(target_obj.getEmittedBin());
+            linker.addArg("-o");
+            const target_exe = linker.addOutputFileArg(b.fmt("{s}.elf", .{test_name}));
+
+            // Set the dependencies for the linking step
+            linker.addFileInput(target_obj.getEmittedBin());
+            linker.addFileInput(test_ld);
+            linker.step.dependOn(&target_obj.step);
+
+            // Create the output rom binary and import it
+            const target_rom = b.addObjCopy(target_exe, .{
+                .basename = test_name,
+                .only_section = ".rom",
+                .format = .bin,
+            });
+            target_rom.step.dependOn(&linker.step);
+            test_mod.addAnonymousImport("target_rom", .{
+                .root_source_file = target_rom.getOutput(),
+            });
+
+            // Create the output ram binary and import it
+            const target_ram = b.addObjCopy(target_exe, .{
+                .basename = test_name,
+                .only_section = ".ram",
+                .format = .bin,
+            });
+            target_ram.step.dependOn(&linker.step);
+            test_mod.addAnonymousImport("target_ram", .{
+                .root_source_file = target_ram.getOutput(),
+            });
+        }
+    }
+
     // Check formatting
-    const fmt = b.addFmt(.{
-        .check = true,
-        .paths = &.{
-            "src/",
-            "test/",
-            "build.zig",
-            "build.zig.zon",
-        },
-    });
+    const fmt = b.addFmt(.{ .check = true, .paths = &.{
+        "src/",
+        "test/",
+        "build.zig",
+        "build.zig.zon",
+    } });
     fmt_step.dependOn(&fmt.step);
     install_step.dependOn(fmt_step);
 

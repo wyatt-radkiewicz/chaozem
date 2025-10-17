@@ -57,11 +57,11 @@ const Test = struct {
 
             // Get the next line from the diassembly and check that they are the same
             const expected = lines.next() orelse {
-                std.debug.print("expected another instruction in \"{s}\" at \"{s}\"\n", err_ctx);
+                std.log.err("expected another instruction in \"{s}\" at \"{s}\"\n", err_ctx);
                 return error.TestFailed;
             };
             std.testing.expectEqualSlices(u8, expected, actual) catch {
-                std.debug.print("disasm failed in \"{s}\" at \"{s}\"\n", err_ctx);
+                std.log.err("disasm failed in \"{s}\" at \"{s}\"\n", err_ctx);
                 return error.TestFailed;
             };
 
@@ -71,13 +71,13 @@ const Test = struct {
 
         // Check the final environment
         this.expect.check(vectors, ram, cpu, cycles) catch {
-            std.debug.print("test failed in \"{s}\" at \"{s}\"\n", err_ctx);
+            std.log.err("test failed in \"{s}\" at \"{s}\"\n", err_ctx);
             return error.TestFailed;
         };
 
         // Check that ROM wasn't accidentally written to
         if (rom.write_addr) |addr| {
-            std.debug.print(
+            std.log.err(
                 \\ test failed in \"{s}\" at \"{s}\"
                 \\ wrote 0x{x:0>4} to ROM at 0x{x:0>6}
             , err_ctx ++ .{ addr, rom.write_data });
@@ -251,8 +251,8 @@ const Ram = struct {
     /// Set data in RAM
     pub fn write(dev: *Device, addr: u23, bytes: u2, data: u16) void {
         const this: *@This() = @fieldParentPtr("device", dev);
-        const mask = [4]u16{ 0x0000, 0x00FF, 0xFF00, 0xFFFF };
-        this.words[addr] = this.words[addr] & ~mask[bytes] | data;
+        const mask = [4]u16{ 0xFFFF, 0xFF00, 0x00FF, 0x0000 };
+        this.words[addr] = this.words[addr] & mask[bytes] | data;
     }
 };
 
@@ -275,7 +275,7 @@ test "m68k tests" {
 
         // Parse the file
         const tests = std.zon.parse.fromSlice(Tests, allocator, bytes, null, .{}) catch {
-            std.debug.print("Failed to parse \"{s}\" m68k test file\n", .{entry.name});
+            std.log.err("Failed to parse \"{s}\" m68k test file\n", .{entry.name});
             return error.ParsingFailed;
         };
         defer std.zon.parse.free(allocator, tests);

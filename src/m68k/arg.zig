@@ -327,17 +327,23 @@ pub const RegRegDelay = struct {
     }
 };
 
+/// Register to Register specific addressing modes
+pub const RegRegMode = enum(u1) {
+    reg, // Data registers
+    mem, // Memory to memory
+};
+
 /// Specialized register to register source and destination target
 pub fn RegReg(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type {
     return struct {
-        mode: u1,
+        mode: RegRegMode,
         reg: u3,
 
         pub fn decode(ctx: *Ctx, comptime size: Size, opcode: u16) @This() {
-            const mode = int.extract(u1, opcode, m);
+            const mode = int.extract(RegRegMode, opcode, m);
             const reg = int.extract(u3, opcode, n);
-            ctx.clk += delay.delay(size, mode);
-            if (mode == 1) {
+            ctx.clk += delay.delay(size, @intFromEnum(mode));
+            if (mode == .mem) {
                 ctx.cpu.an(reg).* -= size.bits() / 8;
             }
             return .{ .mode = mode, .reg = reg };
@@ -345,15 +351,15 @@ pub fn RegReg(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type 
 
         pub fn load(this: @This(), ctx: *Ctx, comptime size: Size, _: u16) size.Int() {
             return switch (this.mode) {
-                0 => @truncate(ctx.cpu.d[this.reg]),
-                1 => ctx.read(size.Int(), ctx.cpu.an(this.reg).*),
+                .reg => @truncate(ctx.cpu.d[this.reg]),
+                .mem => ctx.read(size.Int(), ctx.cpu.an(this.reg).*),
             };
         }
 
         pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
             switch (this.mode) {
-                0 => ctx.cpu.d[this.reg] = int.overwrite(ctx.cpu.d[this.reg], data),
-                1 => ctx.write(size.Int(), ctx.cpu.an(this.reg).*, data),
+                .reg => ctx.cpu.d[this.reg] = int.overwrite(ctx.cpu.d[this.reg], data),
+                .mem => ctx.write(size.Int(), ctx.cpu.an(this.reg).*, data),
             }
         }
 
@@ -364,9 +370,9 @@ pub fn RegReg(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type 
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     const reg = int.extract(u3, this.opcode, n);
-                    switch (int.extract(u1, this.opcode, m)) {
-                        0 => try writer.print("d{}", .{reg}),
-                        1 => try writer.print("-(a{})", .{reg}),
+                    switch (int.extract(RegRegMode, this.opcode, m)) {
+                        .reg => try writer.print("d{}", .{reg}),
+                        .mem => try writer.print("-(a{})", .{reg}),
                     }
                 }
             };

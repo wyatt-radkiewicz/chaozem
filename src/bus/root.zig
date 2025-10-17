@@ -78,7 +78,7 @@ pub fn Bus(comptime width: Width) type {
                 var shift = 0;
                 while (shift < width.addr and for (map) |mapping| {
                     const mask = @as(width.Addr(), 2 << shift) - 1;
-                    const end = mapping.end orelse mapping.start + mapping.size - 1;
+                    const end = mapping.end orelse mapping.start +% mapping.size -% 1;
                     if (mapping.start & mask != 0 or end & mask != mask) {
                         break false;
                     }
@@ -115,7 +115,7 @@ pub fn Bus(comptime width: Width) type {
                     const addr = @as(width.Addr(), shifted) << shift;
                     return for (map, 0..) |mapping, mapping_idx| {
                         if (addr >= mapping.start and addr <= mapping.end orelse
-                            mapping.start + mapping.size - 1)
+                            mapping.start +% mapping.size -% 1)
                         {
                             break mapping_idx;
                         }

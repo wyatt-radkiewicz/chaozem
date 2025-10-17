@@ -19,6 +19,6 @@ fn fib(n: u32) u32 {
     return a;
 }
 
-pub export fn main(input: *const Input, output: *Output) void {
+pub export fn run(input: *const Input, output: *Output) void {
     output.result = fib(input.to);
 }
