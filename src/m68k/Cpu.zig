@@ -40,10 +40,16 @@ pub const Status = packed struct(u16) {
     t: u2 = 0,
 };
 
+/// General purpose register type
+pub const Reg = enum(u1) { d, a };
+
 /// Get address register n
-pub inline fn an(this: *@This(), n: u3) *u32 {
-    return switch (n) {
-        7 => &this.sp[@intFromBool(this.sr.s)],
-        else => |x| &this.a[x],
+pub inline fn r(this: *@This(), comptime reg: Reg, n: u3) *u32 {
+    return switch (reg) {
+        .d => &this.d[n],
+        .a => switch (n) {
+            7 => &this.sp[@intFromBool(this.sr.s)],
+            else => |x| &this.a[x],
+        },
     };
 }

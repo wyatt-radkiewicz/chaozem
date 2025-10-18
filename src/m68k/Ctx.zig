@@ -138,19 +138,19 @@ pub const Mode = enum {
     pub fn calc(this: @This(), ctx: *Ctx, comptime size: Size, reg: u3) u32 {
         return switch (this) {
             .data_reg, .addr_reg => reg,
-            .indirect => ctx.cpu.an(reg).*,
+            .indirect => ctx.cpu.r(.a, reg).*,
             .post_inc => post_inc: {
-                const addr = ctx.cpu.an(reg).*;
-                ctx.cpu.an(reg).* += size.bits() / 8;
+                const addr = ctx.cpu.r(.a, reg).*;
+                ctx.cpu.r(.a, reg).* += size.bits() / 8;
                 break :post_inc addr;
             },
             .pre_dec => pre_dec: {
-                ctx.cpu.an(reg).* -= size.bits() / 8;
+                ctx.cpu.r(.a, reg).* -= size.bits() / 8;
                 ctx.clk += 2;
-                break :pre_dec ctx.cpu.an(reg).*;
+                break :pre_dec ctx.cpu.r(.a, reg).*;
             },
-            .addr_disp => ctx.cpu.an(reg).* +% int.extend(u32, ctx.fetch(u16)),
-            .addr_idx => ctx.cpu.an(reg).* +% ctx.fetch(Index).calc(ctx),
+            .addr_disp => ctx.cpu.r(.a, reg).* +% int.extend(u32, ctx.fetch(u16)),
+            .addr_idx => ctx.cpu.r(.a, reg).* +% ctx.fetch(Index).calc(ctx),
             .abs_word => int.extend(u32, ctx.fetch(u16)),
             .abs_long => ctx.fetch(u32),
             .pc_disp => ctx.cpu.pc +% int.extend(u32, ctx.fetch(u16)),
@@ -165,14 +165,13 @@ pub const Mode = enum {
         _pad0: u3,
         size: u1,
         n: u3,
-        m: u1,
+        m: Cpu.Reg,
 
         /// Gets the total displacement of the index word (casted to unsigned int)
         fn calc(this: @This(), ctx: *Ctx) u32 {
             ctx.clk += 2;
             const reg = switch (this.m) {
-                0 => ctx.cpu.d[this.n],
-                1 => ctx.cpu.an(this.n).*,
+                inline else => |m| ctx.cpu.r(m, this.n).*,
             };
             return switch (this.size) {
                 0 => int.extend(u32, @as(u16, @truncate(reg))),
@@ -195,7 +194,7 @@ pub const Mode = enum {
                     .indirect => try writer.print("(a{})", .{this.reg}),
                     .post_inc => try writer.print("(a{})+", .{this.reg}),
                     .pre_dec => try writer.print("-(a{})", .{this.reg}),
-                    .addr_disp => try writer.print("({},a{})", .{
+                    .addr_disp => try writer.print("(#{},a{})", .{
                         this.reader.takeInt(i16, .big) catch return error.WriteFailed,
                         this.reg,
                     }),
@@ -208,13 +207,13 @@ pub const Mode = enum {
                             .pc_idx => try writer.print("pc", .{}),
                             else => unreachable,
                         }
-                        try writer.print(",{c}{}.{c})", .{ switch (idx.m) {
-                            0 => @as(u8, 'd'),
-                            1 => @as(u8, 'a'),
-                        }, idx.n, switch (idx.size) {
-                            0 => @as(u8, 'w'),
-                            1 => @as(u8, 'l'),
-                        } });
+                        try writer.print(
+                            ",{c}{}.{c})",
+                            .{ @tagName(idx.m)[0], idx.n, switch (idx.size) {
+                                0 => @as(u8, 'w'),
+                                1 => @as(u8, 'l'),
+                            } },
+                        );
                     },
                     .abs_word => try writer.print(
                         "(${x:0>4}).w",
@@ -224,7 +223,7 @@ pub const Mode = enum {
                         "(${x:0>8}).l",
                         .{this.reader.takeInt(u32, .big) catch return error.WriteFailed},
                     ),
-                    .pc_disp => try writer.print("({}, pc)", .{this.reader.takeInt(i16, .big) catch
+                    .pc_disp => try writer.print("(#{}, pc)", .{this.reader.takeInt(i16, .big) catch
                         return error.WriteFailed}),
                     .immediate => switch (size) {
                         .none => unreachable,
@@ -328,64 +327,31 @@ pub const RegMask = packed struct {
     d: std.bit_set.IntegerBitSet(8),
     a: std.bit_set.IntegerBitSet(8),
 
-    /// Order to store registers in
-    pub const Order = enum {
-        forward,
-        reverse,
-
-        /// Gets the register type order
-        fn types(this: @This()) []const []const u8 {
-            return switch (this) {
-                .forward => &.{ "d", "a" },
-                .reverse => &.{ "a", "d" },
-            };
-        }
-
-        /// Gets mask iterator options
-        fn iteratorOptions(this: @This()) std.bit_set.IteratorOptions {
-            return .{ .direction = @field(std.bit_set.IteratorOptions.Direction, switch (this) {
-                inline else => |x| @tagName(x),
-            }) };
-        }
-    };
-
     /// Get the number of registers set in this mask
     pub fn count(this: @This()) usize {
         return this.d.count() + this.a.count();
     }
 
     /// Store a register mask to memory
-    pub fn store(
-        this: @This(),
-        comptime size: Size,
-        ctx: *Ctx,
-        addr: u32,
-        comptime order: Order,
-    ) void {
+    pub fn store(this: @This(), comptime size: Size, ctx: *Ctx, addr: u32) void {
         var offs: u32 = 0;
-        inline for (comptime order.types()) |reg_type| {
-            var iter = @field(this, reg_type).iterator(order.iteratorOptions());
+        inline for (&.{ Cpu.Reg.d, Cpu.Reg.a }) |reg_type| {
+            var iter = @field(this, @tagName(reg_type)).iterator(.{});
             while (iter.next()) |idx| : (offs += size.bits() / 8) {
-                const reg = @field(ctx.cpu, reg_type)[idx];
+                const reg = ctx.cpu.r(reg_type, @truncate(idx)).*;
                 ctx.write(size.Int(), addr +% offs, @truncate(reg));
             }
         }
     }
 
     /// Load registers from memory using a mask
-    pub fn load(
-        this: @This(),
-        comptime size: Size,
-        ctx: *Ctx,
-        addr: u32,
-        comptime order: Order,
-    ) void {
+    pub fn load(this: @This(), comptime size: Size, ctx: *Ctx, addr: u32) void {
         var offs: u32 = 0;
-        inline for (comptime order.types()) |reg_type| {
-            var iter = @field(this, reg_type).iterator(order.iteratorOptions());
+        inline for (&.{ Cpu.Reg.d, Cpu.Reg.a }) |reg_type| {
+            var iter = @field(this, @tagName(reg_type)).iterator(.{});
             while (iter.next()) |idx| : (offs += size.bits() / 8) {
                 const data = ctx.read(size.Int(), addr +% offs);
-                const reg = &@field(ctx.cpu, reg_type)[idx];
+                const reg = ctx.cpu.r(reg_type, @truncate(idx));
                 reg.* = int.overwrite(reg.*, data);
             }
         }
