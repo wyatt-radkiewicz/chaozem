@@ -275,7 +275,7 @@ test "m68k tests" {
 
         // Parse the file
         const tests = std.zon.parse.fromSlice(Tests, allocator, bytes, null, .{}) catch {
-            std.log.err("Failed to parse \"{s}\" m68k test file\n", .{entry.name});
+            std.log.err("Failed to parse \"{s}\" m68k unit test file\n", .{entry.name});
             return error.ParsingFailed;
         };
         defer std.zon.parse.free(allocator, tests);

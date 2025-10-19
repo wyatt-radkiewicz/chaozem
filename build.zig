@@ -6,22 +6,26 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // M68k integration test compilation target info
-    const m68k_query = std.Target.Query{
-        .cpu_arch = .m68k,
-        .cpu_model = .baseline,
-        .os_tag = .freestanding,
-        .abi = .eabi,
-    };
     const m68k_integration_test_path = b.option(
         []const u8,
         "m68k-integration-tests",
         "M68k integration tests directory",
     ) orelse b.pathJoin(&.{ test_dir, m68k_mod_name, "integration" });
-    const m68k_integration_linker_path = b.option(
+    const m68k_integration_compiler_path = b.option(
         []const u8,
-        "m68k-integration-linker",
-        "Path to a m68k compatible linker",
+        "m68k-integration-compiler",
+        "Path to a gnu compatible compiler for m68k",
     );
+    const m68k_integration_disasm = b.option(
+        bool,
+        "m68k-integration-disasm",
+        "Print disassembly info for integration tests",
+    ) orelse false;
+    const m68k_integration_dump = b.option(
+        bool,
+        "m68k-integration-dump",
+        "Dump execution state after every instruction in integration tests",
+    ) orelse false;
     const m68k_unit_test_path = b.option(
         []const u8,
         "m68k-unit-tests",
@@ -125,130 +129,148 @@ pub fn build(b: *std.Build) void {
     const m68k_unit_test_run = b.addRunArtifact(m68k_unit_test_exe);
     test_step.dependOn(&m68k_unit_test_run.step);
 
-    // This tells us if we have m68k compilation support
-    const have_m68k_support = get_m68k_support: {
-        _ = std.zig.system.resolveTargetQuery(m68k_query) catch {
-            std.log.warn("Unable to resolve m68k target, m68k integration tests disabled.", .{});
-            break :get_m68k_support false;
-        };
-        if (m68k_integration_linker_path == null) {
-            std.log.warn("No linker set for m68k target, m68k integration tests disabled.", .{});
-            break :get_m68k_support false;
-        } else {
-            break :get_m68k_support true;
+    // Create the common "Test" type for the integration tester
+    const m68k_integration_test_format_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path(b.pathJoin(&.{
+            m68k_integration_test_path, "scripts", "Test.zig",
+        })),
+    });
+
+    // Get where to store the integration tests
+    const m68k_integration_gen_path = b.pathJoin(&.{ m68k_integration_test_path, "gen" });
+
+    // Create the "m68k" integration tester
+    std.fs.cwd().makeDir(m68k_integration_gen_path) catch |err| {
+        if (err != error.PathAlreadyExists) {
+            std.log.err("Could not create m68k integration test generation directory", .{});
         }
     };
-    if (have_m68k_support) {
-        // Create the resolved target adn the linker path
-        const m68k_target = b.resolveTargetQuery(m68k_query);
-        const linker_path = m68k_integration_linker_path orelse unreachable;
+    const m68k_integration_test_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path(b.pathJoin(&.{
+            src_dir,
+            m68k_mod_name,
+            "test",
+            "integration.zig",
+        })),
+    });
+    m68k_integration_test_mod.addImport(m68k_mod_name, m68k_mod);
+    m68k_integration_test_mod.addImport(bus_mod_name, bus_mod);
+    m68k_integration_test_mod.addImport("Test", m68k_integration_test_format_mod);
 
-        // Each integration test is its own executable since each one is compiled with different code
-        // and interfaces. This will create a module for each test and return it
-        var m68k_integration_test_dir = std.fs.cwd().openDir(
+    // Add the config options
+    const m68k_integration_test_options = b.addOptions();
+    m68k_integration_test_options.addOption([]const u8, "tests_path", m68k_integration_gen_path);
+    m68k_integration_test_mod.addOptions("config", m68k_integration_test_options);
+
+    // Add this to the parent testing step
+    const m68k_integration_test_exe = b.addTest(.{
+        .name = "m68k integration test",
+        .root_module = m68k_integration_test_mod,
+    });
+    const m68k_integration_test_run = b.addRunArtifact(m68k_integration_test_exe);
+    if (m68k_integration_disasm) {
+        m68k_integration_test_run.setEnvironmentVariable("M68K_INTEGRATION_DISASM", "1");
+    }
+    if (m68k_integration_dump) {
+        m68k_integration_test_run.setEnvironmentVariable("M68K_INTEGRATION_DUMP", "1");
+    }
+    test_step.dependOn(&m68k_integration_test_run.step);
+
+    // Generate the integration tests
+    if (m68k_integration_compiler_path) |compiler_path| {
+        // Each integration test is its own executable since each one is compiled with different
+        // code and interfaces. This will create a module for each test and return it
+        var dir = std.fs.cwd().openDir(
             m68k_integration_test_path,
             .{ .iterate = true },
         ) catch @panic("Couldn't open integration test directory");
-        defer m68k_integration_test_dir.close();
-        var m68k_integration_test_iter = m68k_integration_test_dir.iterate();
-        while (m68k_integration_test_iter.next() catch @panic("Error iterating")) |entry| {
+        defer dir.close();
+        var iter = dir.iterate();
+        while (iter.next() catch @panic("Error iterating")) |entry| {
             // Only get source files (assume one for each test)
-            if (!std.mem.eql(u8, ".zig", std.fs.path.extension(entry.name))) {
+            if (!std.mem.eql(u8, ".c", std.fs.path.extension(entry.name))) {
                 continue;
             }
 
             // The name of the test we're running
             const test_name = std.fs.path.stem(entry.name);
 
-            // Create the "m68k" integration tester
-            const test_mod = b.createModule(.{
+            // Get the directory of the helper scripts and some other commonly used paths
+            const scripts_dir = b.pathJoin(&.{ m68k_integration_test_path, "scripts" });
+            const test_src = b.path(b.pathJoin(&.{ m68k_integration_test_path, entry.name }));
+            const linker_src = b.path(b.pathJoin(&.{ scripts_dir, "linker.ld" }));
+
+            // Compile the generator for this test
+            const gen_mod = b.createModule(.{
                 .target = target,
                 .optimize = optimize,
-                .root_source_file = b.path(b.pathJoin(&.{
-                    src_dir,
-                    m68k_mod_name,
-                    "test",
-                    "integration.zig",
-                })),
+                .root_source_file = b.path(b.pathJoin(&.{ scripts_dir, "gen.zig" })),
             });
-            test_mod.addImport(m68k_mod_name, m68k_mod);
-            test_mod.addImport(bus_mod_name, bus_mod);
+            gen_mod.addIncludePath(b.path(m68k_integration_test_path));
+            gen_mod.addCSourceFile(.{ .language = .c, .file = test_src });
+            gen_mod.addImport("Test", m68k_integration_test_format_mod);
 
-            // Add this to the parent testing step
-            const test_mod_exe = b.addTest(.{
-                .name = b.fmt("m68k integration \"{s}\" test", .{test_name}),
-                .root_module = test_mod,
+            // Add a run step to run it during our tests and make the integration tests depend on
+            // this running
+            const gen_exe = b.addExecutable(.{
+                .name = b.fmt("{s}_gen", .{test_name}),
+                .root_module = gen_mod,
             });
-            const test_mod_run = b.addRunArtifact(test_mod_exe);
-            test_step.dependOn(&test_mod_run.step);
-
-            // The root source file and data file of the actual specific test to compile
-            const test_ld = b.path(b.pathJoin(&.{ m68k_integration_test_path, "linker.ld" }));
-            const test_zig = b.path(b.pathJoin(&.{ m68k_integration_test_path, entry.name }));
-            const test_zon = b.path(b.pathJoin(&.{
+            const gen_run = b.addRunArtifact(gen_exe);
+            gen_run.addFileInput(b.path(b.pathJoin(&.{
                 m68k_integration_test_path,
                 b.fmt("{s}.zon", .{test_name}),
-            }));
-            test_mod.addAnonymousImport("input", .{
-                .root_source_file = test_zon,
-            });
+            })));
+            m68k_integration_test_run.step.dependOn(&gen_run.step);
 
-            // Compile the host version of the test
-            const host_mod = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-                .root_source_file = test_zig,
-            });
-            test_mod.addImport("host", host_mod);
+            // Add the config options
+            const options = b.addOptions();
+            options.addOption([]const u8, "tests_path", m68k_integration_test_path);
+            options.addOption([]const u8, "gen_path", m68k_integration_gen_path);
+            options.addOption([]const u8, "name", test_name);
+            gen_mod.addOptions("config", options);
 
             // Compile the target version of the test
-            const target_mod = b.createModule(.{
-                .target = m68k_target,
-                .optimize = .ReleaseSmall,
-                .omit_frame_pointer = true,
-                .unwind_tables = .none,
-                .root_source_file = test_zig,
-            });
-            const target_obj = b.addObject(.{
-                .name = test_name,
-                .root_module = target_mod,
-            });
-
-            // Now that we have an object we'll link it with the provided linker.
-            // This is a work around because as of now, Zig can not link m68k files
-            const linker = b.addSystemCommand(&.{ linker_path, "-T" });
-            linker.addFileArg(test_ld);
-            linker.addFileArg(target_obj.getEmittedBin());
-            linker.addArg("-o");
-            const target_exe = linker.addOutputFileArg(b.fmt("{s}.elf", .{test_name}));
-
-            // Set the dependencies for the linking step
-            linker.addFileInput(target_obj.getEmittedBin());
-            linker.addFileInput(test_ld);
-            linker.step.dependOn(&target_obj.step);
+            const compile = b.addSystemCommand(
+                &.{ compiler_path, "-nostdlib", "-nostartfiles", "-ffreestanding", "-Os" },
+            );
+            compile.addFileArg(test_src);
+            compile.addFileInput(test_src);
+            compile.addArg(b.fmt("-I{s}", .{scripts_dir}));
+            compile.addArg("-T");
+            compile.addFileArg(linker_src);
+            compile.addFileInput(linker_src);
+            compile.addArg("-o");
+            const target_exe = compile.addOutputFileArg(b.fmt("{s}.elf", .{test_name}));
 
             // Create the output rom binary and import it
             const target_rom = b.addObjCopy(target_exe, .{
-                .basename = test_name,
+                .basename = b.fmt("{s}_rom.bin", .{test_name}),
                 .only_section = ".rom",
                 .format = .bin,
             });
-            target_rom.step.dependOn(&linker.step);
-            test_mod.addAnonymousImport("target_rom", .{
+            target_rom.step.dependOn(&compile.step);
+            gen_mod.addAnonymousImport("target_rom", .{
                 .root_source_file = target_rom.getOutput(),
             });
 
             // Create the output ram binary and import it
             const target_ram = b.addObjCopy(target_exe, .{
-                .basename = test_name,
+                .basename = b.fmt("{s}_ram.bin", .{test_name}),
                 .only_section = ".ram",
                 .format = .bin,
             });
-            target_ram.step.dependOn(&linker.step);
-            test_mod.addAnonymousImport("target_ram", .{
+            target_ram.step.dependOn(&compile.step);
+            gen_mod.addAnonymousImport("target_ram", .{
                 .root_source_file = target_ram.getOutput(),
             });
         }
+    } else {
+        std.log.warn("No compiler set for m68k target, m68k integration tests disabled.", .{});
     }
 
     // Check formatting
@@ -263,8 +285,10 @@ pub fn build(b: *std.Build) void {
 
     // Clean artifacts
     const remove_install_dir = b.addRemoveDirTree(.{ .cwd_relative = b.install_path });
+    const remove_gen_dir = b.addRemoveDirTree(.{ .cwd_relative = m68k_integration_gen_path });
     const remove_cache_dir = b.addRemoveDirTree(b.path(".zig-cache"));
     clean_step.dependOn(&remove_install_dir.step);
+    clean_step.dependOn(&remove_gen_dir.step);
     if (@import("builtin").os.tag != .windows) {
         clean_step.dependOn(&remove_cache_dir.step);
     }
