@@ -14,7 +14,7 @@ const Mapping = bus_interface.Mapping(m68k.bus_width);
 
 /// Ram device (allows reading and writing)
 const Ram = struct {
-    bytes: [size]u8 = test_ram.* ++ ([1]u8{0} ** (size - test_ram.len)),
+    bytes: [0x10000]u8 = test_ram.* ++ ([1]u8{0} ** (0x10000 - test_ram.len)),
     device: Device = .{
         .read = struct {
             pub fn read(device: *Device, addr: u23, _: u2) ?u16 {
@@ -34,8 +34,6 @@ const Ram = struct {
             }
         }.write,
     },
-
-    const size = 0x1000 * 64;
 };
 
 test "m68k integration test" {
@@ -93,23 +91,20 @@ test "m68k integration test" {
         try ram_writer.writeInt(u16, 0x4E72, .big);
 
         // Push paramters onto stack in reverse order
+        try ram_writer.flush();
         ram_writer = std.io.Writer.fixed(ram.bytes[ram.bytes.len - 4 - 4 - 4 ..]);
 
         // Push return addres, then input, then output and set stack pointer
         try ram_writer.writeInt(u32, stop_addr, .big);
         try ram_writer.writeInt(u32, input_addr, .big);
         try ram_writer.writeInt(u32, output_addr, .big);
+        try ram_writer.flush();
 
         // Call the run function and run until we've stopped
-        cpu.an(7).* = std.mem.readInt(u32, test_rom[0..4], .big) -% (4 * 3);
+        cpu.r(.a, 7).* = std.mem.readInt(u32, test_rom[0..4], .big) -% (4 * 3);
         cpu.pc = std.mem.readInt(u32, test_rom[4..8], .big);
         var timeout: usize = 0;
         while (!cpu.stop and timeout < 10000 * 20) {
-            var reader_buf: [8]u8 = undefined;
-            var disasm_reader = bus.reader(@truncate(cpu.pc >> 1), &reader_buf, .big, 1);
-            std.debug.print("{f}\n", .{m68k.Disasm{
-                .reader = &disasm_reader.interface,
-            }});
             timeout += m68k.step(&cpu, &bus);
         }
 

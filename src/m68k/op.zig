@@ -33,7 +33,7 @@ pub const Add = struct {
 /// Address addition operation
 pub const Adda = struct {
     pub fn op(_: *Ctx, comptime size: Size, src: size.Int(), dst: u32) u32 {
-        return int.extend(u32, src) +% dst;
+        return dst +% int.extend(u32, src);
     }
 };
 
@@ -616,7 +616,7 @@ pub fn Scc(comptime cond_penalty: usize) type {
 /// Address subtraction operation
 pub const Suba = struct {
     pub fn op(_: *Ctx, comptime size: Size, src: size.Int(), dst: u32) u32 {
-        return int.extend(u32, src) -% dst;
+        return dst -% int.extend(u32, src);
     }
 };
 
