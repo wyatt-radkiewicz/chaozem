@@ -6,6 +6,7 @@ const Bus = bus_interface.Bus;
 const int = @import("int");
 
 const Cpu = @import("Cpu.zig");
+const Reg = Cpu.Reg;
 
 const Ctx = @This();
 
@@ -189,27 +190,27 @@ pub const Mode = enum {
 
             pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                 switch (this.mode) {
-                    .data_reg => try writer.print("d{}", .{this.reg}),
-                    .addr_reg => try writer.print("a{}", .{this.reg}),
-                    .indirect => try writer.print("(a{})", .{this.reg}),
-                    .post_inc => try writer.print("(a{})+", .{this.reg}),
-                    .pre_dec => try writer.print("-(a{})", .{this.reg}),
-                    .addr_disp => try writer.print("(#{},a{})", .{
+                    .data_reg => try writer.print("{f}", .{Reg.d.fmt(this.reg)}),
+                    .addr_reg => try writer.print("{f}", .{Reg.a.fmt(this.reg)}),
+                    .indirect => try writer.print("({f})", .{Reg.a.fmt(this.reg)}),
+                    .post_inc => try writer.print("({f})+", .{Reg.a.fmt(this.reg)}),
+                    .pre_dec => try writer.print("-({f})", .{Reg.a.fmt(this.reg)}),
+                    .addr_disp => try writer.print("(#{},{f})", .{
                         this.reader.takeInt(i16, .big) catch return error.WriteFailed,
-                        this.reg,
+                        Reg.a.fmt(this.reg),
                     }),
                     .addr_idx, .pc_idx => |mode| {
                         const idx: Index = @bitCast(this.reader.takeInt(u16, .big) catch
                             return error.WriteFailed);
                         try writer.print("(#{},", .{idx.disp});
                         switch (mode) {
-                            .addr_idx => try writer.print("a{}", .{this.reg}),
+                            .addr_idx => try writer.print("{f}", .{Reg.a.fmt(this.reg)}),
                             .pc_idx => try writer.print("pc", .{}),
                             else => unreachable,
                         }
                         try writer.print(
-                            ",{c}{}.{c})",
-                            .{ @tagName(idx.m)[0], idx.n, switch (idx.size) {
+                            ",{f}.{c})",
+                            .{ idx.m.fmt(idx.n), switch (idx.size) {
                                 0 => @as(u8, 'w'),
                                 1 => @as(u8, 'l'),
                             } },
@@ -335,7 +336,7 @@ pub const RegMask = packed struct {
     /// Store a register mask to memory
     pub fn store(this: @This(), comptime size: Size, ctx: *Ctx, addr: u32) void {
         var offs: u32 = 0;
-        inline for (&.{ Cpu.Reg.d, Cpu.Reg.a }) |reg_type| {
+        inline for (&.{ Reg.d, Reg.a }) |reg_type| {
             var iter = @field(this, @tagName(reg_type)).iterator(.{});
             while (iter.next()) |idx| : (offs += size.bits() / 8) {
                 const reg = ctx.cpu.r(reg_type, @truncate(idx)).*;
@@ -347,7 +348,7 @@ pub const RegMask = packed struct {
     /// Load registers from memory using a mask
     pub fn load(this: @This(), comptime size: Size, ctx: *Ctx, addr: u32) void {
         var offs: u32 = 0;
-        inline for (&.{ Cpu.Reg.d, Cpu.Reg.a }) |reg_type| {
+        inline for (&.{ Reg.d, Reg.a }) |reg_type| {
             var iter = @field(this, @tagName(reg_type)).iterator(.{});
             while (iter.next()) |idx| : (offs += size.bits() / 8) {
                 const data = ctx.read(size.Int(), addr +% offs);
@@ -363,19 +364,19 @@ pub const RegMask = packed struct {
         mask: RegMask,
 
         pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-            inline for (&.{ "d", "a" }) |reg_type| {
-                var bits = @field(this.mask, reg_type).mask;
+            inline for (&.{ Reg.d, Reg.a }) |reg_type| {
+                var bits = @field(this.mask, @tagName(reg_type)).mask;
                 var idx: u4 = 0;
                 while (bits != 0) {
                     const ones = @ctz(~bits);
                     if (ones > 0) {
                         if (ones == 1) {
-                            try writer.print("{s}{}", .{ reg_type, idx });
+                            try writer.print("{f}", .{reg_type.fmt(@truncate(idx))});
                         } else {
-                            try writer.print(
-                                "{s}{}-{s}{}",
-                                .{ reg_type, idx, reg_type, idx + ones - 1 },
-                            );
+                            try writer.print("{f}-{f}", .{
+                                reg_type.fmt(@truncate(idx)),
+                                reg_type.fmt(@truncate(idx + ones - 1)),
+                            });
                         }
 
                         if (ones != @bitSizeOf(@TypeOf(bits))) {
@@ -393,8 +394,7 @@ pub const RegMask = packed struct {
 
                 // Print a seperator between data and address registers
                 try writer.print("{s}", .{if (this.mask.d.count() > 0 and
-                    this.mask.a.count() > 0 and
-                    comptime std.mem.eql(u8, reg_type, "d")) "/" else ""});
+                    this.mask.a.count() > 0 and reg_type == .d) "/" else ""});
             }
         }
     };

@@ -58,7 +58,32 @@ pub const Status = packed struct(u16) {
 };
 
 /// General purpose register type
-pub const Reg = enum(u1) { d, a };
+pub const Reg = enum(u1) {
+    d,
+    a,
+
+    /// Format the register for output
+    pub fn fmt(this: @This(), n: u3) Fmt {
+        return .{ .m = this, .n = n };
+    }
+
+    /// Formatting for a register
+    pub const Fmt = struct {
+        m: Reg,
+        n: u3,
+
+        /// Print out the register with pretty formatting
+        pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+            switch (this.m) {
+                .a => switch (this.n) {
+                    7 => try writer.print("sp", .{}),
+                    else => try writer.print("a{}", .{this.n}),
+                },
+                .d => try writer.print("d{}", .{this.n}),
+            }
+        }
+    };
+};
 
 /// Get address register n
 pub inline fn r(this: *@This(), comptime reg: Reg, n: u3) *u32 {
@@ -76,7 +101,7 @@ pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
     // Data registers
     try writer.print("Data Registers\n\t", .{});
     for (0..8) |i| {
-        try writer.print("d{}          ", .{i});
+        try writer.print("{f}          ", .{Reg.d.fmt(@truncate(i))});
     }
     try writer.print("\n\t", .{});
     for (this.d) |d| {
@@ -87,7 +112,7 @@ pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
     // Address registers
     try writer.print("Addr Registers\n\t", .{});
     for (0..8) |i| {
-        try writer.print("a{}          ", .{i});
+        try writer.print("{f}          ", .{Reg.a.fmt(@truncate(i))});
     }
     try writer.print("\n\t", .{});
     for (0..8) |i| {

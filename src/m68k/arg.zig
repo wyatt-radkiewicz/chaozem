@@ -3,6 +3,7 @@ const std = @import("std");
 const int = @import("int");
 
 const Cpu = @import("Cpu.zig");
+const Reg = Cpu.Reg;
 const Ctx = @import("Ctx.zig");
 const Size = Ctx.Size;
 
@@ -30,7 +31,7 @@ pub fn DataReg(n: u4) type {
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("d{}", .{int.extract(u3, this.opcode, n)});
+                    try writer.print("{f}", .{Reg.d.fmt(int.extract(u3, this.opcode, n))});
                 }
             };
         }
@@ -60,7 +61,7 @@ pub fn AddrReg(n: u4) type {
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("a{}", .{int.extract(u3, this.opcode, n)});
+                    try writer.print("{f}", .{Reg.a.fmt(int.extract(u3, this.opcode, n))});
                 }
             };
         }
@@ -92,7 +93,7 @@ pub fn PostInc(n: u4) type {
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("(a{})+", .{int.extract(u3, this.opcode, n)});
+                    try writer.print("({f})+", .{Reg.a.fmt(int.extract(u3, this.opcode, n))});
                 }
             };
         }
@@ -223,7 +224,7 @@ pub const BitIdx = struct {
 };
 
 /// Represents a register index
-pub fn RegIdx(comptime reg_type: enum { data, addr }, at: u4) type {
+pub fn RegIdx(comptime reg_type: Reg, at: u4) type {
     return struct {
         n: u3,
 
@@ -237,8 +238,8 @@ pub fn RegIdx(comptime reg_type: enum { data, addr }, at: u4) type {
 
         pub fn store(this: @This(), ctx: *Ctx, comptime size: Size, _: u16, data: size.Int()) void {
             switch (reg_type) {
-                .data => ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], data),
-                .addr => ctx.cpu.r(.a, this.n).* = int.overwrite(ctx.cpu.r(.a, this.n).*, data),
+                .d => ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], data),
+                .a => ctx.cpu.r(.a, this.n).* = int.overwrite(ctx.cpu.r(.a, this.n).*, data),
             }
         }
 
@@ -248,10 +249,7 @@ pub fn RegIdx(comptime reg_type: enum { data, addr }, at: u4) type {
                 opcode: u16,
 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{c}{}", .{ switch (reg_type) {
-                        .data => @as(u8, 'd'),
-                        .addr => @as(u8, 'a'),
-                    }, int.extract(u3, this.opcode, at) });
+                    try writer.print("{f}", .{reg_type.fmt(int.extract(u3, this.opcode, at))});
                 }
             };
         }
@@ -366,8 +364,8 @@ pub fn RegReg(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type 
                 pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
                     const reg = int.extract(u3, this.opcode, n);
                     switch (int.extract(Cpu.Reg, this.opcode, m)) {
-                        .d => try writer.print("d{}", .{reg}),
-                        .a => try writer.print("-(a{})", .{reg}),
+                        .d => try writer.print("{f}", .{Reg.d.fmt(reg)}),
+                        .a => try writer.print("-({f})", .{Reg.a.fmt(reg)}),
                     }
                 }
             };
