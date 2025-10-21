@@ -585,16 +585,19 @@ pub fn Rotate(comptime add_cycles: bool, comptime dir: enum { r, l, rx, lx }) ty
 pub fn Return(comptime restore: enum { none, ccr, sr }) type {
     return struct {
         pub fn op(ctx: *Ctx, comptime _: Size) void {
-            const stack = switch (restore) {
-                .ccr, .none => 0,
-                .sr => 1,
-            };
-            ctx.cpu.sr = switch (restore) {
-                .ccr => @bitCast(int.overwrite(@as(u16, @bitCast(ctx.cpu.sr)), ctx.pop(stack, u8))),
-                .sr => ctx.pop(stack, Cpu.Status),
-                .none => ctx.cpu.sr,
-            };
-            ctx.cpu.pc = ctx.pop(stack, u32);
+            switch (@intFromBool(ctx.cpu.sr.s)) {
+                inline else => |stack| {
+                    ctx.cpu.sr = switch (restore) {
+                        .ccr => @bitCast(int.overwrite(
+                            @as(u16, @bitCast(ctx.cpu.sr)),
+                            ctx.pop(stack, u8),
+                        )),
+                        .sr => ctx.pop(stack, Cpu.Status),
+                        .none => ctx.cpu.sr,
+                    };
+                    ctx.cpu.pc = ctx.pop(stack, u32);
+                },
+            }
         }
     };
 }
