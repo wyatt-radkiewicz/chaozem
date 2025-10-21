@@ -72,7 +72,7 @@ const Token = union(enum) {
 
     /// How long the disassembly for an instruction can be
     const max_disasm_len = 64;
-    
+
     /// Format the output for state debugging
     const State = struct {
         tok: Token,
@@ -348,16 +348,23 @@ test "m68k integration test" {
         }
         tokens.deinit(allocator);
     }
-    if (debug_fmt.len > 0) {
-        std.debug.print("\n\n", .{});
-    }
     var fmt_reader = std.io.Reader.fixed(debug_fmt);
     while (Token.parse(allocator, &fmt_reader) catch {
         std.log.err("Debugging format wrong at pos: {}", .{fmt_reader.end});
         return error.TestFailed;
     }) |token| {
-        std.debug.print("{f}", .{token});
         try tokens.append(allocator, token);
+    }
+
+    // Get what tests we should run
+    const run_tests_env = std.process.getEnvVarOwned(allocator, "M68K_INTEGRATION_ENABLE") catch
+        try allocator.dupe(u8, "");
+    defer allocator.free(run_tests_env);
+    var tests_to_run = try std.ArrayList([]const u8).initCapacity(allocator, 8);
+    defer tests_to_run.deinit(allocator);
+    var run_tests_iter = std.mem.splitScalar(u8, run_tests_env, ',');
+    while (run_tests_iter.next()) |@"test"| {
+        try tests_to_run.append(allocator, @"test");
     }
 
     // Find and run every test in the current directory
@@ -367,6 +374,15 @@ test "m68k integration test" {
     while (try iter.next()) |entry| {
         // Make sure we are testing a test file
         if (entry.kind != .file or !std.mem.eql(u8, ".zon", std.fs.path.extension(entry.name))) {
+            continue;
+        }
+
+        // If there are specific tests to run check if this is the test we want to run
+        if (run_tests_env.len > 0 and for (tests_to_run.items) |@"test"| {
+            if (std.mem.eql(u8, @"test", std.fs.path.stem(entry.name))) {
+                break false;
+            }
+        } else true) {
             continue;
         }
 
@@ -384,6 +400,18 @@ test "m68k integration test" {
 
         // Run each test case in the file
         for (tests.cases, 0..) |case, i| {
+            // Print the header for this test
+            if (tokens.items.len > 0) {
+                std.debug.print(
+                    "\n\"{s}\" test case: \"{s}\"\n",
+                    .{ std.fs.path.stem(entry.name), case.name },
+                );
+                for (tokens.items) |token| {
+                    std.debug.print("{f}", .{token});
+                }
+                std.debug.print("\n", .{});
+            }
+
             // Create the rom and ram interface and the bus interface
             var rom = Rom{ .bytes = tests.rom };
             var ram = Ram.init(tests, case);

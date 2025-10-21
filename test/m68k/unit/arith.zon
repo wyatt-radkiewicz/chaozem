@@ -507,5 +507,16 @@
                 .flags = .{ .c = false, .v = false, .z = false, .n = false, .x = false },
             },
         },
+        .{
+            .env = .{
+                .code = .{ 0x0281, 0x0000, 0xFFFF },
+                .data = .{ 0, 0x55555555 },
+            },
+            .expect = .{
+                .disasm = "andi.l #$0000ffff,d1",
+                .clk = 16,
+                .data = .{ 0, 0x00005555 },
+            },
+        },
     },
 }

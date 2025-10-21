@@ -30,6 +30,11 @@ pub fn build(b: *std.Build) void {
         \\\t{b:n-m}             Print bytes from n to m
         \\\t{st},{st:n}         Print up to 'n' bytes of stack
     );
+    const m68k_integration_enable = b.option(
+        []const u8,
+        "m68k-integration-enable",
+        "Enable certain m68k integration tests by giving the names seperated by commas",
+    );
     const m68k_unit_test_path = b.option(
         []const u8,
         "m68k-unit-tests",
@@ -173,6 +178,9 @@ pub fn build(b: *std.Build) void {
     const m68k_integration_test_run = b.addRunArtifact(m68k_integration_test_exe);
     if (m68k_integration_format) |format| {
         m68k_integration_test_run.setEnvironmentVariable("M68K_INTEGRATION_FORMAT", format);
+    }
+    if (m68k_integration_enable) |enable| {
+        m68k_integration_test_run.setEnvironmentVariable("M68K_INTEGRATION_ENABLE", enable);
     }
     test_step.dependOn(&m68k_integration_test_run.step);
 

@@ -48,25 +48,35 @@ pub fn main() !void {
 
     // Generate each test case
     const cases = try allocator.alloc(Test.Case, inputs.len);
-    defer allocator.free(cases);
-    const setups = try allocator.alloc([@sizeOf(c.Input)]u8, inputs.len);
-    defer allocator.free(setups);
-    const expects = try allocator.alloc([@sizeOf(c.Output)]u8, inputs.len);
-    defer allocator.free(expects);
+    defer {
+        for (cases) |case| {
+            allocator.free(case.name);
+            allocator.free(case.setup);
+            allocator.free(case.expect);
+        }
+        allocator.free(cases);
+    }
     for (0..inputs.len) |i| {
         // Generate the expect state
         var output: c.Output = undefined;
         c.run(&inputs[i], &output);
-        var writer = std.io.Writer.fixed(&expects[i]);
+        const expect = try allocator.alloc(u8, @sizeOf(c.Output));
+        var writer = std.io.Writer.fixed(expect);
         try writer.writeStruct(output, .big);
 
         // Setup the input
-        writer = std.io.Writer.fixed(&setups[i]);
+        const setup = try allocator.alloc(u8, @sizeOf(c.Input));
+        writer = std.io.Writer.fixed(setup);
         try writer.writeStruct(inputs[i], .big);
 
+        // Generate a name for the test
+        var name = std.io.Writer.Allocating.init(allocator);
+        try name.writer.print("{any}", .{inputs[i]});
+
         // Setup the case
-        cases[i].setup = &setups[i];
-        cases[i].expect = &expects[i];
+        cases[i].name = try name.toOwnedSlice();
+        cases[i].setup = setup;
+        cases[i].expect = expect;
     }
 
     // Create the output

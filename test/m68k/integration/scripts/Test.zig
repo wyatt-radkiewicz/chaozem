@@ -24,6 +24,9 @@ cases: []const Case,
 
 /// A case of a test
 pub const Case = struct {
+    /// Name of the case
+    name: []const u8,
+
     /// Setup bytes
     setup: []const u8,
 

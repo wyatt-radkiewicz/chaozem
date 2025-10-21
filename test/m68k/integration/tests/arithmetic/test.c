@@ -12,11 +12,11 @@ void run(const struct Input* input, struct Output* output)
 
     // Try mul/div
     output->result *= input->a;
-    output->result /= input->b;
+    output->result /= input->b / 100;
 
     // Try bitwise operations
     output->result += input->a & input->b;
     output->result -= input->a ^ input->b;
     output->result *= ~input->a;
-    output->result /= input->a | input->b;
+    output->result /= (input->a | input->b) >> 5;
 }
