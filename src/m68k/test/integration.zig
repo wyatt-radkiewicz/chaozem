@@ -269,6 +269,9 @@ const Token = union(enum) {
                         }
                     },
                     .b => {
+                        if ((reader.takeByte() catch return error.ParseFailed) != ':') {
+                            return error.ParseFailed;
+                        }
                         var writer = std.io.Writer.Allocating.init(allocator);
                         defer writer.deinit();
 
@@ -284,7 +287,7 @@ const Token = union(enum) {
 
                         // End address
                         writer.clearRetainingCapacity();
-                        _ = reader.streamDelimiter(&writer.writer, '-') catch
+                        _ = reader.streamDelimiter(&writer.writer, '}') catch
                             return error.ParseFailed;
                         _ = reader.discard(.limited(1)) catch return error.ParseFailed;
                         const end = @as(u23, @truncate(std.math.divCeil(u32, std.fmt.parseInt(
