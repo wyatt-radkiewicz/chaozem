@@ -165,7 +165,7 @@ const Token = union(enum) {
                 try writer.print("  ttsm-ipl---xnzvc", .{}),
             .stop => try writer.print("stop ", .{}),
             .b => |r| {
-                const len = (r[1] - r[0]) * 7 - 1;
+                const len = (r[1] - r[0]) * 7 + 6;
                 try writer.print("0x{x:0>8}", .{@as(usize, r[0]) << 1});
                 if (len < 21) {
                     _ = try writer.splatByte(' ', 21 - len);
