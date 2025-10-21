@@ -118,7 +118,7 @@ const Token = union(enum) {
                         );
                     }
                     try writer.print("0x{x:0>4}", .{this.bus.read(range[1], 0b11) orelse 0});
-                    if (std.math.sub(u23, 10, (range[1] - range[0]) * 7 - 1)) |n| {
+                    if (std.math.sub(u23, 11, (range[1] - range[0]) * 7)) |n| {
                         _ = try writer.splatByte(' ', n);
                     } else |_| {}
                 },
@@ -290,11 +290,11 @@ const Token = union(enum) {
                         _ = reader.streamDelimiter(&writer.writer, '}') catch
                             return error.ParseFailed;
                         _ = reader.discard(.limited(1)) catch return error.ParseFailed;
-                        const end = @as(u23, @truncate(std.math.divCeil(u32, std.fmt.parseInt(
+                        const end = @as(u23, @truncate((std.fmt.parseInt(
                             u32,
                             writer.written(),
                             0,
-                        ) catch return error.ParseFailed, 2) catch unreachable));
+                        ) catch return error.ParseFailed) >> 1));
 
                         // Return bytes to print
                         return .{ .b = .{ start, end } };
