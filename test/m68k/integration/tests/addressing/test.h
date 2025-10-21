@@ -4,8 +4,10 @@
 #include <stdint.h>
 
 struct Input {
-    uint16_t a;
-    uint16_t b;
+    uint16_t offset;
+    uint16_t count;
+    uint8_t a[8];
+    uint8_t b[8];
 };
 
 struct Output {

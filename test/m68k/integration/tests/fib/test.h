@@ -11,6 +11,4 @@ struct Output {
     uint32_t result;
 };
 
-void run(const struct Input* input, struct Output* output);
-
 #endif

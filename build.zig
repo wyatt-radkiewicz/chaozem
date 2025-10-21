@@ -251,6 +251,7 @@ pub fn build(b: *std.Build) void {
                 .sanitize_c = .off,
             });
             gen_mod.addIncludePath(b.path(test_path));
+            gen_mod.addIncludePath(b.path(b.pathJoin(&.{ scripts_dir, "include", "host" })));
             gen_mod.addCSourceFile(.{ .language = .c, .file = test_src });
             gen_mod.addImport("Test", m68k_integration_test_format_mod);
 
@@ -282,7 +283,7 @@ pub fn build(b: *std.Build) void {
             });
             compile.addFileArg(test_src);
             compile.addFileInput(test_src);
-            compile.addArg(b.fmt("-I{s}", .{scripts_dir}));
+            compile.addArg(b.fmt("-I{s}", .{b.pathJoin(&.{ scripts_dir, "include", "target" })}));
             compile.addArg("-T");
             compile.addFileArg(linker_src);
             compile.addFileInput(linker_src);

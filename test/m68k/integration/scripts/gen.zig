@@ -7,7 +7,10 @@ const Test = @import("Test");
 
 const target_rom = @embedFile("target_rom");
 const target_ram = @embedFile("target_ram");
-const c = @cImport(@cInclude("test.h"));
+const c = @cImport({
+    @cInclude("test.h");
+    @cInclude("run.h");
+});
 
 /// Run the main conversion script
 pub fn main() !void {
