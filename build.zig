@@ -248,6 +248,7 @@ pub fn build(b: *std.Build) void {
                 .target = target,
                 .optimize = optimize,
                 .root_source_file = b.path(b.pathJoin(&.{ scripts_dir, "gen.zig" })),
+                .sanitize_c = .off,
             });
             gen_mod.addIncludePath(b.path(test_path));
             gen_mod.addCSourceFile(.{ .language = .c, .file = test_src });
@@ -271,9 +272,14 @@ pub fn build(b: *std.Build) void {
             gen_mod.addOptions("config", options);
 
             // Compile the target version of the test
-            const compile = b.addSystemCommand(
-                &.{ compiler_path, "-nostdlib", "-nostartfiles", "-ffreestanding", "-Os" },
-            );
+            const compile = b.addSystemCommand(&.{
+                compiler_path,
+                "-nostdlib",
+                "-nostartfiles",
+                "-ffreestanding",
+                "-Os",
+                "-m68000",
+            });
             compile.addFileArg(test_src);
             compile.addFileInput(test_src);
             compile.addArg(b.fmt("-I{s}", .{scripts_dir}));
