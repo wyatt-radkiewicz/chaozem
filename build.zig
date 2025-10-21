@@ -16,16 +16,20 @@ pub fn build(b: *std.Build) void {
         "m68k-integration-compiler",
         "Path to a gnu compatible compiler for m68k",
     );
-    const m68k_integration_disasm = b.option(
-        bool,
-        "m68k-integration-disasm",
-        "Print disassembly info for integration tests",
-    ) orelse false;
-    const m68k_integration_dump = b.option(
-        bool,
-        "m68k-integration-dump",
-        "Dump execution state after every instruction in integration tests",
-    ) orelse false;
+    const m68k_integration_format = b.option([]const u8, "m68k-integration-format",
+        \\The formatting before each intruction is run.
+        \\The info printed is formatted using a formatting string with "{}" like in zig
+        \\Here are the format specifiers:
+        \\\t{pc}                Program counter
+        \\\t{i}                 Print instruction disassembly
+        \\\t{d:n}               Data registers
+        \\\t{a:n}               Address registers
+        \\\t{sp:n}              Stack pointers
+        \\\t{sr},{sr:_}         Status register or specific status register's flag '_'
+        \\\t{stop}              Stop status
+        \\\t{b:n-m}             Print bytes from n to m
+        \\\t{st},{st:n}         Print up to 'n' bytes of stack
+    );
     const m68k_unit_test_path = b.option(
         []const u8,
         "m68k-unit-tests",
@@ -172,11 +176,8 @@ pub fn build(b: *std.Build) void {
         .root_module = m68k_integration_test_mod,
     });
     const m68k_integration_test_run = b.addRunArtifact(m68k_integration_test_exe);
-    if (m68k_integration_disasm) {
-        m68k_integration_test_run.setEnvironmentVariable("M68K_INTEGRATION_DISASM", "1");
-    }
-    if (m68k_integration_dump) {
-        m68k_integration_test_run.setEnvironmentVariable("M68K_INTEGRATION_DUMP", "1");
+    if (m68k_integration_format) |format| {
+        m68k_integration_test_run.setEnvironmentVariable("M68K_INTEGRATION_FORMAT", format);
     }
     test_step.dependOn(&m68k_integration_test_run.step);
 

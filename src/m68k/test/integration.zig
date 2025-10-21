@@ -20,7 +20,7 @@ const Rom = struct {
         if (addr < rom.bytes.len / 2) {
             return std.mem.readInt(u16, rom.bytes[addr * 2 ..][0..2], .big);
         } else {
-            return 0;
+            return null;
         }
     }
 };
@@ -55,45 +55,307 @@ const Ram = struct {
             0b11 => std.mem.writeInt(u16, ram.bytes[addr * 2 ..][0..2], data, .big),
         }
     }
+};
 
-    /// Print debug info
-    const Debug = struct {
-        ram: *const Ram,
-        base: usize,
-        to: usize,
+/// A piece of the formatting string
+const Token = union(enum) {
+    literal: []const u8,
+    pc: void,
+    i: void,
+    d: u3,
+    a: u3,
+    sp: u1,
+    sr: ?std.meta.FieldEnum(m68k.Cpu.Status),
+    stop: void,
+    b: struct { u23, u23 },
+    st: ?usize,
 
+    /// How long the disassembly for an instruction can be
+    const max_disasm_len = 64;
+    
+    /// Format the output for state debugging
+    const State = struct {
+        tok: Token,
+        cpu: *const m68k.Cpu,
+        bus: *const Bus,
+
+        /// Format the output
         pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-            var byte: u32 = 0;
-            while (byte < this.to) {
-                try writer.print("0x{X:0>8}: ", .{byte + this.base});
-                for (0..8) |i| {
-                    try writer.print(
-                        " {X:0>4}",
-                        .{std.mem.readInt(u16, this.ram.bytes[byte + i * 2 ..][0..2], .big)},
-                    );
-                    byte += 2;
-                }
-                try writer.print("\n", .{});
+            switch (this.tok) {
+                .literal => |str| try writer.print("{s}", .{str}),
+                .pc => try writer.print("0x{x:0>8}", .{this.cpu.pc}),
+                .i => {
+                    var reader_buf: [8]u8 = undefined;
+                    var reader = this.bus.reader(@truncate(this.cpu.pc >> 1), &reader_buf, .big, 1);
+                    var disasm_buf: [max_disasm_len]u8 = undefined;
+                    const disasm = std.fmt.bufPrint(&disasm_buf, "{f}", .{m68k.Disasm{
+                        .reader = &reader.interface,
+                    }}) catch @panic("Disassembly formatting out of range");
+                    try writer.printAscii(disasm, .{
+                        .alignment = .left,
+                        .fill = ' ',
+                        .width = max_disasm_len,
+                    });
+                },
+                .d => |n| try writer.print("0x{x:0>8}", .{this.cpu.d[n]}),
+                .a => |n| try writer.print("0x{x:0>8}", .{switch (n) {
+                    7 => this.cpu.sp[@intFromBool(this.cpu.sr.s)],
+                    else => this.cpu.a[n],
+                }}),
+                .sp => |n| try writer.print("0x{x:0>8}", .{this.cpu.sp[n]}),
+                .sr => |field| if (field) |f| switch (f) {
+                    inline else => |x| try writer.print(
+                        "{any}",
+                        .{@field(this.cpu.sr, @tagName(x))},
+                    ),
+                } else try writer.print("0b{b:0>16}", .{@as(u16, @bitCast(this.cpu.sr))}),
+                .stop => try writer.print("{}", .{this.cpu.stop}),
+                .b => |range| {
+                    for (range[0]..range[1]) |addr| {
+                        try writer.print(
+                            "0x{x:0>4},",
+                            .{this.bus.read(@truncate(addr), 0b11) orelse 0},
+                        );
+                    }
+                    try writer.print("0x{x:0>4}", .{this.bus.read(range[1], 0b11) orelse 0});
+                    if (std.math.sub(u23, 10, (range[1] - range[0]) * 7 - 1)) |n| {
+                        _ = try writer.splatByte(' ', n);
+                    } else |_| {}
+                },
+                .st => |l| {
+                    const start: u23 = if (l) |limit|
+                        @truncate(0x800000 - (std.math.divCeil(usize, limit, 2) catch unreachable))
+                    else
+                        @as(u23, @truncate(this.cpu.sp[@intFromBool(this.cpu.sr.s)] >> 1));
+                    for (start..0x7fffff) |addr| {
+                        try writer.print(
+                            "0x{x:0>4},",
+                            .{this.bus.read(@truncate(addr), 0b11) orelse 0},
+                        );
+                    }
+                    try writer.print("0x{x:0>4}", .{this.bus.read(0x7fffff, 0b11) orelse 0});
+                },
             }
         }
     };
+
+    /// Format this token for a header
+    pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
+        switch (this) {
+            .literal => |str| _ = try writer.splatByte(' ', str.len),
+            .pc => try writer.print("pc        ", .{}),
+            .i => try writer.printAscii("disasm", .{
+                .alignment = .left,
+                .fill = ' ',
+                .width = max_disasm_len,
+            }),
+            .d => |n| try writer.print("{f}        ", .{m68k.Cpu.Reg.d.fmt(n)}),
+            .a => |n| try writer.print("{f}        ", .{m68k.Cpu.Reg.a.fmt(n)}),
+            .sp => |n| switch (n) {
+                0 => try writer.print("usp       ", .{}),
+                1 => try writer.print("ssp       ", .{}),
+            },
+            .sr => |f| if (f) |flag|
+                try writer.printAscii(@tagName(flag), .{
+                    .alignment = .left,
+                    .fill = ' ',
+                    .width = 5,
+                })
+            else
+                try writer.print("  ttsm-ipl---xnzvc", .{}),
+            .stop => try writer.print("stop ", .{}),
+            .b => |r| {
+                const len = (r[1] - r[0]) * 7 - 1;
+                try writer.print("0x{x:0>8}", .{@as(usize, r[0]) << 1});
+                if (len < 21) {
+                    _ = try writer.splatByte(' ', 21 - len);
+                } else {
+                    _ = try writer.splatByte(' ', len - 20);
+                    try writer.print("0x{x:0>8}", .{@as(usize, r[1]) << 1});
+                }
+            },
+            .st => |n| if (n) |limit|
+                try writer.printAscii("stack", .{
+                    .alignment = .left,
+                    .fill = ' ',
+                    .width = (std.math.divCeil(usize, limit, 2) catch unreachable) * 7 - 1,
+                })
+            else
+                try writer.print("stack", .{}),
+        }
+    }
+
+    /// Greedily parses whats in the reader to get the next token
+    fn parse(allocator: std.mem.Allocator, reader: *std.io.Reader) error{ParseFailed}!?@This() {
+        switch (reader.peekByte() catch |err|
+            if (err == error.EndOfStream) return null else return error.ParseFailed) {
+            '{' => {
+                _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                var spec = std.io.Writer.Allocating.init(allocator);
+                defer spec.deinit();
+                if ((reader.peekByte() catch return error.ParseFailed) == '{') {
+                    _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                    return .{ .literal = "{" };
+                }
+                while (reader.peekByte()) |byte| {
+                    switch (byte) {
+                        ':', '}' => break,
+                        else => spec.writer.writeByte(reader.takeByte() catch unreachable) catch
+                            return error.ParseFailed,
+                    }
+                } else |_| {
+                    return error.ParseFailed;
+                }
+                switch (std.meta.stringToEnum(
+                    std.meta.FieldEnum(@This()),
+                    spec.written(),
+                ) orelse return error.ParseFailed) {
+                    .literal => return error.ParseFailed,
+                    inline .pc, .i, .stop => |tok_type| {
+                        if ((reader.takeByte() catch return error.ParseFailed) != '}') {
+                            return error.ParseFailed;
+                        } else {
+                            return @unionInit(@This(), @tagName(tok_type), {});
+                        }
+                    },
+                    inline .d, .a, .sp => |tok_type| {
+                        if ((reader.takeByte() catch return error.ParseFailed) != ':') {
+                            return error.ParseFailed;
+                        }
+                        var writer = std.io.Writer.Allocating.init(allocator);
+                        defer writer.deinit();
+                        _ = reader.streamDelimiter(&writer.writer, '}') catch
+                            return error.ParseFailed;
+                        _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                        return @unionInit(@This(), @tagName(tok_type), std.fmt.parseInt(
+                            @FieldType(@This(), @tagName(tok_type)),
+                            writer.written(),
+                            0,
+                        ) catch return error.ParseFailed);
+                    },
+                    .st => {
+                        switch (reader.takeByte() catch return error.ParseFailed) {
+                            ':' => {
+                                var writer = std.io.Writer.Allocating.init(allocator);
+                                defer writer.deinit();
+                                _ = reader.streamDelimiter(&writer.writer, '}') catch
+                                    return error.ParseFailed;
+                                _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                                return .{
+                                    .st = std.fmt.parseInt(usize, writer.written(), 0) catch
+                                        return error.ParseFailed,
+                                };
+                            },
+                            '}' => return .{ .st = null },
+                            else => return error.ParseFailed,
+                        }
+                    },
+                    .sr => {
+                        switch (reader.takeByte() catch return error.ParseFailed) {
+                            ':' => {
+                                var writer = std.io.Writer.Allocating.init(allocator);
+                                defer writer.deinit();
+                                _ = reader.streamDelimiter(&writer.writer, '}') catch
+                                    return error.ParseFailed;
+                                _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                                const Flags = std.meta.FieldEnum(m68k.Cpu.Status);
+                                return .{ .sr = std.meta.stringToEnum(
+                                    Flags,
+                                    writer.written(),
+                                ) orelse return error.ParseFailed };
+                            },
+                            '}' => return .{ .sr = null },
+                            else => return error.ParseFailed,
+                        }
+                    },
+                    .b => {
+                        var writer = std.io.Writer.Allocating.init(allocator);
+                        defer writer.deinit();
+
+                        // Start address
+                        _ = reader.streamDelimiter(&writer.writer, '-') catch
+                            return error.ParseFailed;
+                        _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                        const start = @as(u23, @truncate((std.fmt.parseInt(
+                            u32,
+                            writer.written(),
+                            0,
+                        ) catch return error.ParseFailed) >> 1));
+
+                        // End address
+                        writer.clearRetainingCapacity();
+                        _ = reader.streamDelimiter(&writer.writer, '-') catch
+                            return error.ParseFailed;
+                        _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                        const end = @as(u23, @truncate(std.math.divCeil(u32, std.fmt.parseInt(
+                            u32,
+                            writer.written(),
+                            0,
+                        ) catch return error.ParseFailed, 2) catch unreachable));
+
+                        // Return bytes to print
+                        return .{ .b = .{ start, end } };
+                    },
+                }
+            },
+            else => {
+                var literal = std.io.Writer.Allocating.init(allocator);
+                defer literal.deinit();
+                while (true) {
+                    switch (reader.peekByte() catch |err|
+                        if (err == error.EndOfStream) break else return error.ParseFailed) {
+                        '{' => break,
+                        '}' => {
+                            _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                            if ((reader.takeByte() catch return error.ParseFailed) != '}') {
+                                return error.ParseFailed;
+                            }
+                            return .{ .literal = "}" };
+                        },
+                        else => |byte| {
+                            _ = reader.discard(.limited(1)) catch return error.ParseFailed;
+                            literal.writer.writeByte(byte) catch return error.ParseFailed;
+                        },
+                    }
+                }
+                return .{ .literal = literal.toOwnedSlice() catch return error.ParseFailed };
+            },
+        }
+    }
+
+    /// Releases resources used by this token
+    fn deinit(this: @This(), allocator: std.mem.Allocator) void {
+        switch (this) {
+            .literal => |str| allocator.free(str),
+            else => {},
+        }
+    }
 };
 
-// Prints a instruction at the address
-fn instr(bus: Bus, addr: u32) !void {
-    var buffer: [8]u8 = undefined;
-    var reader = bus.reader(@truncate(addr >> 1), &buffer, .big, 1);
-    std.debug.print("0x{X:0>8}: {f}\n", .{ addr, m68k.Disasm{
-        .reader = &reader.interface,
-    } });
-}
-
 test "m68k integration test" {
-    // Check environment for 'M68K_INTEGRATION_DISASM' to print out disassembly
-    const do_disasm = std.process.parseEnvVarInt("M68K_INTEGRATION_DISASM", i8, 10) catch 0 != 0;
-
-    // Check arguments for 'M68K_INTEGRATION_DUMP' to dump cpu info on every instruction
-    const do_dump = std.process.parseEnvVarInt("M68K_INTEGRATION_DUMP", i8, 10) catch 0 != 0;
+    // What to print before each instruction and at the end
+    const allocator = std.testing.allocator;
+    const debug_fmt = std.process.getEnvVarOwned(allocator, "M68K_INTEGRATION_FORMAT") catch
+        try allocator.dupe(u8, "");
+    defer allocator.free(debug_fmt);
+    var tokens = try std.ArrayList(Token).initCapacity(allocator, 8);
+    defer {
+        for (tokens.items) |token| {
+            token.deinit(allocator);
+        }
+        tokens.deinit(allocator);
+    }
+    if (debug_fmt.len > 0) {
+        std.debug.print("\n\n", .{});
+    }
+    var fmt_reader = std.io.Reader.fixed(debug_fmt);
+    while (Token.parse(allocator, &fmt_reader) catch {
+        std.log.err("Debugging format wrong at pos: {}", .{fmt_reader.end});
+        return error.TestFailed;
+    }) |token| {
+        std.debug.print("{f}", .{token});
+        try tokens.append(allocator, token);
+    }
 
     // Find and run every test in the current directory
     var dir = try std.fs.cwd().openDir(config.tests_path, .{ .iterate = true });
@@ -107,7 +369,6 @@ test "m68k integration test" {
 
         // Read in the file
         const max_len = 4 * 1024 * 1024;
-        const allocator = std.testing.allocator;
         const bytes = try dir.readFileAllocOptions(allocator, entry.name, max_len, null, .@"1", 0);
         defer allocator.free(bytes);
 
@@ -140,14 +401,15 @@ test "m68k integration test" {
             cpu.pc = std.mem.readInt(u32, tests.rom[4..8], .big);
             var timeout: usize = 0;
             while (!cpu.stop) {
-                if (do_dump) {
-                    std.debug.print(
-                        "{f}\n{f}\n",
-                        .{ cpu, Ram.Debug{ .ram = &ram, .base = 0xffff0000, .to = tests.ram_end } },
-                    );
+                for (tokens.items) |token| {
+                    std.debug.print("{f}", .{Token.State{
+                        .tok = token,
+                        .bus = &bus,
+                        .cpu = &cpu,
+                    }});
                 }
-                if (do_disasm) {
-                    try instr(bus, cpu.pc);
+                if (tokens.items.len > 0) {
+                    std.debug.print("\n", .{});
                 }
 
                 // Check if we timedout
@@ -156,14 +418,6 @@ test "m68k integration test" {
                     std.log.err("Test case {} timed out in {s}.", .{ i, entry.name });
                     return error.TestFailed;
                 }
-            }
-
-            // Dump processor status one last time and also post a dump of the ram
-            if (do_dump) {
-                std.debug.print(
-                    "{f}\n{f}\n",
-                    .{ cpu, Ram.Debug{ .ram = &ram, .base = 0xffff0000, .to = tests.ram_end } },
-                );
             }
 
             // Check the outputs
