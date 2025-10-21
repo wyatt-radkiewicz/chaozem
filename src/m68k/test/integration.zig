@@ -366,7 +366,7 @@ test "m68k integration test" {
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
         // Make sure we are testing a test file
-        if (!std.mem.eql(u8, ".zon", std.fs.path.extension(entry.name))) {
+        if (entry.kind != .file or !std.mem.eql(u8, ".zon", std.fs.path.extension(entry.name))) {
             continue;
         }
 

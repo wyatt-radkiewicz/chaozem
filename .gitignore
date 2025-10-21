@@ -1,3 +1,3 @@
 .zig-cache
 zig-out
-test/m68k/integration/gen
+test/m68k/integration/.gen

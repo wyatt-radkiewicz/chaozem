@@ -7,7 +7,7 @@ const Test = @import("Test");
 
 const target_rom = @embedFile("target_rom");
 const target_ram = @embedFile("target_ram");
-const c = @cImport(@cInclude(std.fmt.comptimePrint("{s}.h", .{config.name})));
+const c = @cImport(@cInclude("test.h"));
 
 /// Run the main conversion script
 pub fn main() !void {
@@ -15,10 +15,7 @@ pub fn main() !void {
 
     // Get the input
     const max_len: usize = 0x1000 * 0x1000 * 4;
-    const input_path = try std.fs.path.join(allocator, &.{
-        config.tests_path,
-        std.fmt.comptimePrint("{s}.zon", .{config.name}),
-    });
+    const input_path = try std.fs.path.join(allocator, &.{ config.tests_path, "input.zon" });
     defer allocator.free(input_path);
     const input_file = try std.fs.cwd().readFileAllocOptions(
         allocator,

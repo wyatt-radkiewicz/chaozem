@@ -143,14 +143,9 @@ pub fn build(b: *std.Build) void {
     });
 
     // Get where to store the integration tests
-    const m68k_integration_gen_path = b.pathJoin(&.{ m68k_integration_test_path, "gen" });
+    const m68k_integration_gen_path = b.pathJoin(&.{ m68k_integration_test_path, ".gen" });
 
     // Create the "m68k" integration tester
-    std.fs.cwd().makeDir(m68k_integration_gen_path) catch |err| {
-        if (err != error.PathAlreadyExists) {
-            std.log.err("Could not create m68k integration test generation directory", .{});
-        }
-    };
     const m68k_integration_test_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -181,28 +176,63 @@ pub fn build(b: *std.Build) void {
     }
     test_step.dependOn(&m68k_integration_test_run.step);
 
+    // Remove any stale tests from the generation directory
+    std.fs.cwd().makeDir(m68k_integration_gen_path) catch |err| {
+        if (err != error.PathAlreadyExists) {
+            std.log.err("Could not create m68k integration test generation directory", .{});
+        }
+    };
+    var m68k_integration_gen_dir = std.fs.cwd().openDir(
+        m68k_integration_gen_path,
+        .{ .iterate = true },
+    ) catch @panic("Couldn't open integration test generation directory");
+    defer m68k_integration_gen_dir.close();
+    var m68k_integration_gen_iter = m68k_integration_gen_dir.iterate();
+    while (m68k_integration_gen_iter.next() catch @panic("Error iterating")) |entry| {
+        // Only get zon files
+        if (entry.kind != .file or !std.mem.eql(u8, ".zon", std.fs.path.extension(entry.name))) {
+            continue;
+        }
+
+        // Check if the corresponding directory exists
+        if (std.fs.cwd().statFile(b.pathJoin(&.{
+            m68k_integration_test_path,
+            "tests",
+            std.fs.path.stem(entry.name),
+        }))) |_| {} else |err| {
+            if (err == error.FileNotFound) {
+                // Remove this test
+                std.fs.cwd().deleteFile(b.pathJoin(&.{
+                    m68k_integration_gen_path,
+                    entry.name,
+                })) catch @panic("Can not to delete stale test from generation directory");
+            }
+        }
+    }
+
     // Generate the integration tests
     if (m68k_integration_compiler_path) |compiler_path| {
         // Each integration test is its own executable since each one is compiled with different
         // code and interfaces. This will create a module for each test and return it
         var dir = std.fs.cwd().openDir(
-            m68k_integration_test_path,
+            b.pathJoin(&.{ m68k_integration_test_path, "tests" }),
             .{ .iterate = true },
         ) catch @panic("Couldn't open integration test directory");
         defer dir.close();
         var iter = dir.iterate();
         while (iter.next() catch @panic("Error iterating")) |entry| {
-            // Only get source files (assume one for each test)
-            if (!std.mem.eql(u8, ".c", std.fs.path.extension(entry.name))) {
+            // Only get directories
+            if (entry.kind != .directory) {
                 continue;
             }
 
             // The name of the test we're running
             const test_name = std.fs.path.stem(entry.name);
+            const test_path = b.pathJoin(&.{ m68k_integration_test_path, "tests", entry.name });
 
             // Get the directory of the helper scripts and some other commonly used paths
             const scripts_dir = b.pathJoin(&.{ m68k_integration_test_path, "scripts" });
-            const test_src = b.path(b.pathJoin(&.{ m68k_integration_test_path, entry.name }));
+            const test_src = b.path(b.pathJoin(&.{ test_path, "test.c" }));
             const linker_src = b.path(b.pathJoin(&.{ scripts_dir, "linker.ld" }));
 
             // Compile the generator for this test
@@ -211,7 +241,7 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
                 .root_source_file = b.path(b.pathJoin(&.{ scripts_dir, "gen.zig" })),
             });
-            gen_mod.addIncludePath(b.path(m68k_integration_test_path));
+            gen_mod.addIncludePath(b.path(test_path));
             gen_mod.addCSourceFile(.{ .language = .c, .file = test_src });
             gen_mod.addImport("Test", m68k_integration_test_format_mod);
 
@@ -222,15 +252,12 @@ pub fn build(b: *std.Build) void {
                 .root_module = gen_mod,
             });
             const gen_run = b.addRunArtifact(gen_exe);
-            gen_run.addFileInput(b.path(b.pathJoin(&.{
-                m68k_integration_test_path,
-                b.fmt("{s}.zon", .{test_name}),
-            })));
+            gen_run.addFileInput(b.path(b.pathJoin(&.{ m68k_integration_test_path, "input.zon" })));
             m68k_integration_test_run.step.dependOn(&gen_run.step);
 
             // Add the config options
             const options = b.addOptions();
-            options.addOption([]const u8, "tests_path", m68k_integration_test_path);
+            options.addOption([]const u8, "tests_path", test_path);
             options.addOption([]const u8, "gen_path", m68k_integration_gen_path);
             options.addOption([]const u8, "name", test_name);
             gen_mod.addOptions("config", options);
