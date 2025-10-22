@@ -23,7 +23,7 @@ static void rot13(uint8_t len, uint8_t* str)
 
 void run(const struct Input* input, struct Output* output)
 {
-    for (int8_t i = 15; i > -1; --i) {
+    for (int8_t i = sizeof(output->str) - 1; i >= 0; --i) {
         output->str[i] = input->str[i];
     }
     rot13(16, output->str);

@@ -29,7 +29,7 @@ void bubblesort(uint16_t len, uint16_t* arr)
 
 void run(const struct Input* input, struct Output* output)
 {
-    for (int16_t i = 7; i >= 0; --i) {
+    for (int16_t i = sizeof(output->arr) / sizeof(output->arr[0]) - 1; i >= 0; --i) {
         output->arr[i] = input->arr[i];
     }
     bubblesort(8, output->arr);
