@@ -31,12 +31,16 @@ const Ram = struct {
     device: Device = .{ .read = read, .write = write },
 
     /// Initialize ram with test info
-    fn init(tests: Test, case: Test.Case) @This() {
+    fn init(tests: Test) @This() {
         var this = @This(){};
         @memcpy(this.bytes[0..tests.ram.len], tests.ram);
+        return this;
+    }
+
+    /// Load the input for case data
+    fn load(this: *@This(), tests: Test, case: Test.Case) void {
         @memcpy(this.bytes[this.bytes.len - tests.stack.len ..], tests.stack);
         @memcpy(this.bytes[tests.setup_base..][0..case.setup.len], case.setup);
-        return this;
     }
 
     /// Read data
@@ -398,6 +402,20 @@ test "m68k integration test" {
         };
         defer std.zon.parse.free(allocator, tests);
 
+        // Create the rom and base ram regions
+        var rom = Rom{ .bytes = tests.rom };
+        var ram = Ram.init(tests);
+        var bus = Bus.init(&.{
+            Mapping{
+                .start = 0,
+                .size = 0x10000 >> 1,
+            },
+            Mapping{
+                .start = 0xff0000 >> 1,
+                .size = 0x10000 >> 1,
+            },
+        }, &.{ &rom.device, &ram.device });
+
         // Run each test case in the file
         for (tests.cases, 0..) |case, i| {
             // Print the header for this test
@@ -413,18 +431,7 @@ test "m68k integration test" {
             }
 
             // Create the rom and ram interface and the bus interface
-            var rom = Rom{ .bytes = tests.rom };
-            var ram = Ram.init(tests, case);
-            var bus = Bus.init(&.{
-                Mapping{
-                    .start = 0,
-                    .size = 0x10000 >> 1,
-                },
-                Mapping{
-                    .start = 0xff0000 >> 1,
-                    .size = 0x10000 >> 1,
-                },
-            }, &.{ &rom.device, &ram.device });
+            ram.load(tests, case);
             var cpu = m68k.Cpu{};
 
             // Call the run function and run until we've stopped
