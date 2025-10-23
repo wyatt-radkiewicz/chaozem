@@ -1,8 +1,8 @@
 /* M68k Integration Test Linker File (for target "m68000" arch) */
 /* Integration tester memory regions */
 MEMORY {
-    /* Rom will start at the beginning at the memory space and be 64K big */
-    rom (rx) : org = 0x000000, len = 64K
+    /* Rom will start at the beginning at the memory space and be 128K big */
+    rom (rx) : org = 0x000000, len = 128K
 
     /* Ram will start at the last 64K of the memory space */
     ram (!rx) : org = 0xff0000, len = 64K
@@ -28,6 +28,7 @@ SECTIONS {
     .ram : {
         /* Source data segments */
         *(.data) *(.data*)
+        *(.bss) *(.bss*)
 
         /* End of RAM marker, also this is here so that even if there is no source segments
          * there will still be something for objcopy to copy */

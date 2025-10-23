@@ -127,17 +127,18 @@ const Token = union(enum) {
                     } else |_| {}
                 },
                 .st => |l| {
-                    const start: u23 = if (l) |limit|
-                        @truncate(0x800000 - (std.math.divCeil(usize, limit, 2) catch unreachable))
-                    else
-                        @as(u23, @truncate(this.cpu.sp[@intFromBool(this.cpu.sr.s)] >> 1));
-                    for (start..0x7fffff) |addr| {
+                    const start: u23 = @truncate(this.cpu.sp[@intFromBool(this.cpu.sr.s)] >> 1);
+                    const end: u23 = if (l) |limit| @truncate(@min(
+                        0x7fffff,
+                        @as(usize, start) + (std.math.divCeil(usize, limit, 2) catch unreachable),
+                    )) else 0x7fffff;
+                    for (start..end) |addr| {
                         try writer.print(
                             "0x{x:0>4},",
                             .{this.bus.read(@truncate(addr), 0b11) orelse 0},
                         );
                     }
-                    try writer.print("0x{x:0>4}", .{this.bus.read(0x7fffff, 0b11) orelse 0});
+                    try writer.print("0x{x:0>4}", .{this.bus.read(end, 0b11) orelse 0});
                 },
             }
         }
@@ -408,7 +409,7 @@ test "m68k integration test" {
         var bus = Bus.init(&.{
             Mapping{
                 .start = 0,
-                .size = 0x10000 >> 1,
+                .size = 0x20000 >> 1,
             },
             Mapping{
                 .start = 0xff0000 >> 1,
@@ -450,9 +451,9 @@ test "m68k integration test" {
                     std.debug.print("\n", .{});
                 }
 
-                // Check if we timedout
+                // Check if we timedout (this is seeing if it'd take more than a second at 7Mhz)
                 timeout += m68k.step(&cpu, &bus);
-                if (timeout >= 10000 * 20) {
+                if (timeout >= 7000000) {
                     std.log.err("Test case {} timed out in {s}.", .{ i, entry.name });
                     return error.TestFailed;
                 }
