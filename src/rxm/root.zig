@@ -1,16 +1,29 @@
-//! Ram chip for sega genesis
+//! Rom and ram chips for sega genesis
 const std = @import("std");
 
 const bus_interface = @import("bus");
 const Width = bus_interface.Width;
 
-/// Create a ram chip width 'width'
-pub fn Ram(comptime width: Width) type {
+/// What type of chip to use
+pub const Type = enum {
+    /// Read only (ROM)
+    ro,
+
+    /// Read and write (RAM)
+    rw,
+};
+
+/// Create a rom/ram chip width 'width'
+pub fn Rxm(comptime rxm: Type, comptime width: Width) type {
     // Create aliases
     const Device = bus_interface.Device(width);
     const Addr = width.Addr();
     const Mask = width.Mask();
     const Data = width.Data();
+    const Buffer = switch (rxm) {
+        .ro => []const Data,
+        .rw => []Data,
+    };
 
     // Generate mask values for writing
     const bus_mask = comptime blk: {
@@ -27,14 +40,17 @@ pub fn Ram(comptime width: Width) type {
 
     // Return the struct
     return struct {
-        words: []Data,
+        words: Buffer,
         device: Device,
 
         /// Initialize ram, refrences buffer for the lifetime of this device
-        pub fn init(buffer: []Data) @This() {
+        pub fn init(buffer: Buffer) @This() {
             return .{
                 .words = buffer,
-                .device = .{ .read = read, .write = write },
+                .device = .{ .read = read, .write = switch (rxm) {
+                    .ro => null,
+                    .rw => write,
+                } },
             };
         }
 
@@ -47,8 +63,13 @@ pub fn Ram(comptime width: Width) type {
         /// Write implementation
         pub fn write(device: *Device, addr: Addr, mask: Mask, data: Data) void {
             const this: *@This() = @fieldParentPtr("device", device);
-            if (addr < this.words.len) {
-                this.words[addr] = (this.words[addr] & ~bus_mask[mask]) | (data & bus_mask[mask]);
+            switch (rxm) {
+                .ro => {},
+                .rw => if (addr < this.words.len) {
+                    const valid = bus_mask[mask];
+                    this.words[addr] &= ~valid;
+                    this.words[addr] |= data & valid;
+                },
             }
         }
     };

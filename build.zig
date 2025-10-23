@@ -109,28 +109,28 @@ pub fn build(b: *std.Build) void {
     const bus_test_run = b.addRunArtifact(bus_test_exe);
     test_step.dependOn(&bus_test_run.step);
 
-    // Compile the "ram" module and tests
-    const ram_mod = b.createModule(.{
+    // Compile the "rxm" module and tests
+    const rxm_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path(b.pathJoin(&.{ src_dir, ram_mod_name, "root.zig" })),
+        .root_source_file = b.path(b.pathJoin(&.{ src_dir, rxm_mod_name, "root.zig" })),
     });
-    ram_mod.addImport(bus_mod_name, bus_mod);
+    rxm_mod.addImport(bus_mod_name, bus_mod);
 
-    const ram_test_mod = b.createModule(.{
+    const rxm_test_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path(b.pathJoin(&.{ src_dir, ram_mod_name, "test.zig" })),
+        .root_source_file = b.path(b.pathJoin(&.{ src_dir, rxm_mod_name, "test.zig" })),
     });
-    ram_test_mod.addImport(ram_mod_name, ram_mod);
-    ram_test_mod.addImport(bus_mod_name, bus_mod);
+    rxm_test_mod.addImport(rxm_mod_name, rxm_mod);
+    rxm_test_mod.addImport(bus_mod_name, bus_mod);
 
-    const ram_test_exe = b.addTest(.{
-        .name = b.fmt("\"{s}\" module tests", .{ram_mod_name}),
-        .root_module = ram_test_mod,
+    const rxm_test_exe = b.addTest(.{
+        .name = b.fmt("\"{s}\" module tests", .{rxm_mod_name}),
+        .root_module = rxm_test_mod,
     });
-    const ram_test_run = b.addRunArtifact(ram_test_exe);
-    test_step.dependOn(&ram_test_run.step);
+    const rxm_test_run = b.addRunArtifact(rxm_test_exe);
+    test_step.dependOn(&rxm_test_run.step);
 
     // Create the "m68k" module
     const m68k_mod = b.createModule(.{
@@ -370,4 +370,4 @@ const int_mod_name = "int";
 const page_mod_name = "page";
 const bus_mod_name = "bus";
 const m68k_mod_name = "m68k";
-const ram_mod_name = "ram";
+const rxm_mod_name = "rxm";
