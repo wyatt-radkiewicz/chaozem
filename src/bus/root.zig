@@ -76,7 +76,7 @@ pub fn Bus(comptime width: Width) type {
             // table by finding a greatest common denominator between the addresses in log 2.
             const shift = comptime gcd: {
                 var shift = 0;
-                while (shift < width.addr and for (map) |mapping| {
+                while (shift + 1 < width.addr and for (map) |mapping| {
                     const mask = @as(width.Addr(), 2 << shift) - 1;
                     const end = mapping.end orelse mapping.start +% mapping.size -% 1;
                     if (mapping.start & mask != 0 or end & mask != mask) {
