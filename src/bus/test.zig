@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const bus = @import("root.zig");
+const bus = @import("bus");
 
 test "16 bit address and 8 bit data bus" {
     const width = bus.Width{

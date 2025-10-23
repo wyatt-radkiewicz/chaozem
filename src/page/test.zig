@@ -1,7 +1,7 @@
 const std = @import("std");
 const Signedness = std.builtin.Signedness;
 
-const page = @import("root.zig");
+const page = @import("page");
 
 test "test small table with only one page entry and positive entry values" {
     const opts = page.Options{

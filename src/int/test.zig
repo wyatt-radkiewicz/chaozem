@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const int = @import("root.zig");
+const int = @import("int");
 
 test "extract" {
     try std.testing.expectEqual(@as(u4, 0x3), int.extract(u4, @as(u16, 0x3210), 12));
