@@ -150,6 +150,7 @@ pub fn build(b: *std.Build) void {
     });
     m68k_unit_test_mod.addImport(m68k_mod_name, m68k_mod);
     m68k_unit_test_mod.addImport(bus_mod_name, bus_mod);
+    m68k_unit_test_mod.addImport(rxm_mod_name, rxm_mod);
 
     // Add the config options
     const m68k_unit_test_options = b.addOptions();
@@ -189,6 +190,7 @@ pub fn build(b: *std.Build) void {
     });
     m68k_integration_test_mod.addImport(m68k_mod_name, m68k_mod);
     m68k_integration_test_mod.addImport(bus_mod_name, bus_mod);
+    m68k_integration_test_mod.addImport(rxm_mod_name, rxm_mod);
     m68k_integration_test_mod.addImport("Test", m68k_integration_test_format_mod);
 
     // Add the config options

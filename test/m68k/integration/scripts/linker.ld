@@ -22,6 +22,11 @@ SECTIONS {
         /* Code and read only data */
         *(.text) *(.text*)
         *(.rodata) *(.rodata*)
+
+        /* End of ROM marker, also this is here so that even if there is no source segments
+         * there will still be something for objcopy to copy */
+        . = ALIGN(2);
+        LONG(0xA5A5A5A5)
     } >rom = 0x00
 
     /* Initialize the ram with the data */
@@ -32,6 +37,7 @@ SECTIONS {
 
         /* End of RAM marker, also this is here so that even if there is no source segments
          * there will still be something for objcopy to copy */
+        . = ALIGN(2);
         LONG(0xA5A5A5A5)
     } >ram = 0x00
 }

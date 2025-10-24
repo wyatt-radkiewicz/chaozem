@@ -3,6 +3,7 @@ const std = @import("std");
 const bus_interface = @import("bus");
 const config = @import("config");
 const m68k = @import("m68k");
+const rxm = @import("rxm");
 
 const Bus = bus_interface.Bus(m68k.bus_width);
 const Device = bus_interface.Device(m68k.bus_width);
@@ -23,20 +24,23 @@ const Test = struct {
     fn run(this: @This(), group: []const u8, vectors: Vectors, allocator: std.mem.Allocator) !void {
         // Setup the environment to test
         const err_ctx = .{ group, this.expect.disasm };
-        var rom = Rom{};
-        var ram = Ram{};
+        var rom_buffer = [1]u16{0x0000} ** (0x1000 >> 1);
+        var ram_buffer = [1]u16{0x0000} ** (0x1000 >> 1);
         var cpu = m68k.Cpu{};
-        this.env.setup(vectors, &cpu, &rom, &ram);
+        this.env.setup(vectors, &cpu, &rom_buffer, &ram_buffer);
+        var rom = rxm.Rxm(.rw, m68k.bus_width).init(&rom_buffer);
+        var ram = rxm.Rxm(.rw, m68k.bus_width).init(&ram_buffer);
+        const initial_rom_buffer = rom_buffer;
 
         // Create a bus interface to access the environment
         var bus = Bus.init(&.{
             Mapping{
                 .start = 0,
-                .size = rom.words.len,
+                .size = rom_buffer.len,
             },
             Mapping{
-                .start = rom.words.len,
-                .size = ram.words.len,
+                .start = rom_buffer.len,
+                .size = ram_buffer.len,
                 .end = std.math.maxInt(m68k.bus_width.Addr()),
             },
         }, &.{ &rom.device, &ram.device });
@@ -70,19 +74,16 @@ const Test = struct {
         }
 
         // Check the final environment
-        this.expect.check(vectors, ram, cpu, cycles) catch {
+        this.expect.check(vectors, &ram_buffer, cpu, cycles) catch {
             std.log.err("test failed in \"{s}\" at \"{s}\"\n", err_ctx);
             return error.TestFailed;
         };
 
         // Check that ROM wasn't accidentally written to
-        if (rom.write_addr) |addr| {
-            std.log.err(
-                \\ test failed in \"{s}\" at \"{s}\"
-                \\ wrote 0x{x:0>4} to ROM at 0x{x:0>6}
-            , err_ctx ++ .{ addr, rom.write_data });
+        std.testing.expectEqualSlices(u16, &initial_rom_buffer, &rom_buffer) catch {
+            std.log.err("test failed in \"{s}\" at \"{s}\"", err_ctx);
             return error.TestFailed;
-        }
+        };
     }
 };
 
@@ -136,24 +137,24 @@ const Env = struct {
     flags: Flags = .{},
 
     /// Initialize the state of the cpu
-    fn setup(this: @This(), vectors: Vectors, cpu: *m68k.Cpu, rom: *Rom, ram: *Ram) void {
+    fn setup(this: @This(), vectors: Vectors, cpu: *m68k.Cpu, rom: []u16, ram: []u16) void {
         // Inject the vectors into the rom
         inline for (comptime std.meta.fieldNames(m68k.Vector)) |vector| {
             if (@hasField(Vectors, vector)) {
                 const addr = @field(m68k.Vector, vector).addr();
                 const value = @field(vectors, vector);
-                rom.words[addr >> 1] = @truncate(value >> 16);
-                rom.words[(addr >> 1) + 1] = @truncate(value);
+                rom[addr >> 1] = @truncate(value >> 16);
+                rom[(addr >> 1) + 1] = @truncate(value);
             }
         }
 
         // Inject the code into the rom
         const code_start = vectors.reset_pc >> 1;
-        @memcpy(rom.words[code_start .. code_start + this.code.len], this.code);
+        @memcpy(rom[code_start .. code_start + this.code.len], this.code);
 
         // Inject data and stack into ram
-        @memcpy(ram.words[0..this.ram.len], this.ram);
-        @memcpy(ram.words[ram.words.len - this.stack.len ..], this.stack);
+        @memcpy(ram[0..this.ram.len], this.ram);
+        @memcpy(ram[ram.len - this.stack.len ..], this.stack);
 
         // Setup the special purpose registers
         const stack = vectors.reset_sp - @as(u32, @intCast(this.stack.len * 2));
@@ -183,17 +184,22 @@ const Expect = struct {
     stop: ?bool = null,
 
     /// Check the state of the runner
-    fn check(this: @This(), vectors: Vectors, ram: Ram, cpu: m68k.Cpu, cycles: usize) !void {
+    fn check(
+        this: @This(),
+        vectors: Vectors,
+        ram: []const u16,
+        cpu: m68k.Cpu,
+        cycles: usize,
+    ) !void {
         try std.testing.expectEqual(this.clk orelse cycles, cycles);
         if (this.pc) |pc| {
             try std.testing.expectEqual(vectors.reset_pc + pc, cpu.pc);
         }
         if (this.ram) |words| {
-            try std.testing.expectEqualSlices(u16, words, ram.words[0..words.len]);
+            try std.testing.expectEqualSlices(u16, words, ram[0..words.len]);
         }
         if (this.stack) |stack| {
-            const start = ram.words.len - stack.len;
-            try std.testing.expectEqualSlices(u16, stack, ram.words[start..ram.words.len]);
+            try std.testing.expectEqualSlices(u16, stack, ram[ram.len - stack.len ..]);
         }
         if (this.data) |data| {
             try std.testing.expectEqualSlices(u32, data, cpu.d[0..data.len]);
@@ -213,46 +219,6 @@ const Expect = struct {
         if (this.flags) |flags| {
             try flags.check(cpu);
         }
-    }
-};
-
-/// ROM chip implementation for m68k
-const Rom = struct {
-    words: [0x1000 >> 1]u16 = [1]u16{0} ** (0x1000 >> 1),
-    device: Device = .{ .read = read },
-    write_addr: ?u24 = null,
-    write_data: u16 = 0,
-
-    /// Get data from ROM
-    pub fn read(dev: *Device, addr: u23, _: u2) ?u16 {
-        const this: *@This() = @fieldParentPtr("device", dev);
-        return this.words[addr];
-    }
-
-    /// Write data to ROM, (this does nothing but log the write)
-    pub fn write(dev: *Device, addr: u23, _: u2, data: u16) void {
-        const this: *@This() = @fieldParentPtr("device", dev);
-        this.write_addr = @as(u24, addr) << 1;
-        this.write_data = data;
-    }
-};
-
-/// RAM chip implementation for m68k
-const Ram = struct {
-    words: [0x1000 >> 1]u16 = [1]u16{0} ** (0x1000 >> 1),
-    device: Device = .{ .read = read, .write = write },
-
-    /// Get data from RAM
-    pub fn read(dev: *Device, addr: u23, _: u2) ?u16 {
-        const this: *@This() = @fieldParentPtr("device", dev);
-        return this.words[addr];
-    }
-
-    /// Set data in RAM
-    pub fn write(dev: *Device, addr: u23, bytes: u2, data: u16) void {
-        const this: *@This() = @fieldParentPtr("device", dev);
-        const mask = [4]u16{ 0xFFFF, 0xFF00, 0x00FF, 0x0000 };
-        this.words[addr] = this.words[addr] & mask[bytes] | data;
     }
 };
 

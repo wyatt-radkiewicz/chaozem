@@ -33,21 +33,32 @@ pub fn main() !void {
     defer std.zon.parse.free(allocator, inputs);
 
     // Round size of input and output to 2
-    const input_len = @divFloor(@sizeOf(c.Input) + 1, 2) * 2 + 2;
-    const output_len = @divFloor(@sizeOf(c.Output) + 1, 2) * 2 + 2;
-    const ram_len = @divFloor(target_ram.len + 1, 2) * 2 + 2;
-    const rom_len = @divFloor(target_rom.len + 1, 2) * 2 + 2;
+    const input_len = @divFloor(@sizeOf(c.Input) + 1, 2);
+    const output_len = @divFloor(@sizeOf(c.Output) + 1, 2);
+    const ram_len = @divExact(target_ram.len, 2);
+    const rom_len = @divExact(target_rom.len, 2);
 
     // Generate base rom image
-    var rom: [rom_len + 2]u8 = undefined;
-    @memcpy(rom[0..target_rom.len], target_rom);
-    std.mem.writeInt(u16, rom[rom_len..][0..2], 0x4E72, .big);
+    var rom: [rom_len + 1]u16 = undefined;
+    var reader = std.io.Reader.fixed(target_rom);
+    try reader.readSliceEndian(u16, rom[0..rom_len], .big);
+
+    // Add stop instruction
+    rom[rom_len] = 0x4E72;
+
+    // Generate base ram image
+    var ram: [ram_len]u16 = undefined;
+    reader = std.io.Reader.fixed(target_ram);
+    try reader.readSliceEndian(u16, &ram, .big);
 
     // Generate base stack image
-    var stack: [12]u8 = undefined;
-    std.mem.writeInt(u32, stack[0..][0..4], rom_len, .big);
-    std.mem.writeInt(u32, stack[4..][0..4], 0xffff0000 + ram_len, .big);
-    std.mem.writeInt(u32, stack[8..][0..4], 0xffff0000 + input_len + ram_len, .big);
+    var stack_bytes: [12]u8 = undefined;
+    std.mem.writeInt(u32, stack_bytes[0..][0..4], rom_len * 2, .big);
+    std.mem.writeInt(u32, stack_bytes[4..][0..4], 0xffff0000 + ram_len * 2, .big);
+    std.mem.writeInt(u32, stack_bytes[8..][0..4], 0xffff0000 + (input_len + ram_len) * 2, .big);
+    var stack: [6]u16 = undefined;
+    reader = std.io.Reader.fixed(&stack_bytes);
+    try reader.readSliceEndian(u16, &stack, .big);
 
     // Generate each test case
     const cases = try allocator.alloc(Test.Case, inputs.len);
@@ -63,14 +74,26 @@ pub fn main() !void {
         // Generate the expect state
         var output: c.Output = undefined;
         c.run(&inputs[i], &output);
-        const expect = try allocator.alloc(u8, @sizeOf(c.Output));
-        var writer = std.io.Writer.fixed(expect);
+
+        // Get the bytes of the output
+        var output_bytes = [1]u8{0} ** (output_len * 2);
+        var writer = std.io.Writer.fixed(&output_bytes);
         try writer.writeStruct(output, .big);
 
-        // Setup the input
-        const setup = try allocator.alloc(u8, @sizeOf(c.Input));
-        writer = std.io.Writer.fixed(setup);
+        // Get the words of the output
+        const expect = try allocator.alloc(u16, output_len);
+        reader = std.io.Reader.fixed(&output_bytes);
+        try reader.readSliceEndian(u16, expect, .big);
+
+        // Setup the input bytes
+        var input_bytes = [1]u8{0} ** (input_len * 2);
+        writer = std.io.Writer.fixed(&input_bytes);
         try writer.writeStruct(inputs[i], .big);
+
+        // Get the input words
+        const setup = try allocator.alloc(u16, input_len);
+        reader = std.io.Reader.fixed(&input_bytes);
+        try reader.readSliceEndian(u16, setup, .big);
 
         // Generate a name for the test
         var name = std.io.Writer.Allocating.init(allocator);
@@ -93,7 +116,7 @@ pub fn main() !void {
     var writer = output_file.writer(&buffer);
     try std.zon.stringify.serialize(Test{
         .rom = &rom,
-        .ram = target_ram,
+        .ram = &ram,
         .stack = &stack,
         .setup_base = ram_len,
         .expect_base = ram_len + input_len,

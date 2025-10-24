@@ -3,63 +3,12 @@ const std = @import("std");
 const bus_interface = @import("bus");
 const config = @import("config");
 const m68k = @import("m68k");
+const rxm = @import("rxm");
 const Test = @import("Test");
 
 const Bus = bus_interface.Bus(m68k.bus_width);
 const Device = bus_interface.Device(m68k.bus_width);
 const Mapping = bus_interface.Mapping(m68k.bus_width);
-
-/// Rom device (only allows reading)
-const Rom = struct {
-    bytes: []const u8,
-    device: Device = .{ .read = read },
-
-    /// Read from the device
-    pub fn read(device: *Device, addr: u23, _: u2) ?u16 {
-        const rom: *Rom = @fieldParentPtr("device", device);
-        if (addr < rom.bytes.len / 2) {
-            return std.mem.readInt(u16, rom.bytes[addr * 2 ..][0..2], .big);
-        } else {
-            return null;
-        }
-    }
-};
-
-/// Ram device (allows reading and writing)
-const Ram = struct {
-    bytes: [0x10000]u8 = [1]u8{0} ** 0x10000,
-    device: Device = .{ .read = read, .write = write },
-
-    /// Initialize ram with test info
-    fn init(tests: Test) @This() {
-        var this = @This(){};
-        @memcpy(this.bytes[0..tests.ram.len], tests.ram);
-        return this;
-    }
-
-    /// Load the input for case data
-    fn load(this: *@This(), tests: Test, case: Test.Case) void {
-        @memcpy(this.bytes[this.bytes.len - tests.stack.len ..], tests.stack);
-        @memcpy(this.bytes[tests.setup_base..][0..case.setup.len], case.setup);
-    }
-
-    /// Read data
-    pub fn read(device: *Device, addr: u23, _: u2) ?u16 {
-        const ram: *Ram = @fieldParentPtr("device", device);
-        return std.mem.readInt(u16, ram.bytes[addr * 2 ..][0..2], .big);
-    }
-
-    /// Write data
-    pub fn write(device: *Device, addr: u23, mask: u2, data: u16) void {
-        const ram: *Ram = @fieldParentPtr("device", device);
-        switch (mask) {
-            0b00 => {},
-            0b10 => ram.bytes[addr * 2 + 0] = @truncate(data >> 8),
-            0b01 => ram.bytes[addr * 2 + 1] = @truncate(data),
-            0b11 => std.mem.writeInt(u16, ram.bytes[addr * 2 ..][0..2], data, .big),
-        }
-    }
-};
 
 /// A piece of the formatting string
 const Token = union(enum) {
@@ -403,9 +352,13 @@ test "m68k integration test" {
         };
         defer std.zon.parse.free(allocator, tests);
 
-        // Create the rom and base ram regions
-        var rom = Rom{ .bytes = tests.rom };
-        var ram = Ram.init(tests);
+        // Initialize rom and ram
+        var rom = rxm.Rxm(.ro, m68k.bus_width).init(tests.rom);
+        var ram_buffer = [1]u16{0x0000} ** (0x10000 >> 1);
+        @memcpy(ram_buffer[0..tests.ram.len], tests.ram);
+        var ram = rxm.Rxm(.rw, m68k.bus_width).init(&ram_buffer);
+
+        // Create bus interface
         var bus = Bus.init(&.{
             Mapping{
                 .start = 0,
@@ -431,13 +384,16 @@ test "m68k integration test" {
                 std.debug.print("\n", .{});
             }
 
-            // Create the rom and ram interface and the bus interface
-            ram.load(tests, case);
+            // Load in stack and input
+            @memcpy(ram.words[ram.words.len - tests.stack.len ..], tests.stack);
+            @memcpy(ram.words[tests.setup_base .. tests.setup_base + case.setup.len], case.setup);
+
+            // Initialize cpu
             var cpu = m68k.Cpu{};
+            cpu.r(.a, 7).* = (@as(u32, tests.rom[0]) << 16 | @as(u32, tests.rom[1])) -% (4 * 3);
+            cpu.pc = @as(u32, tests.rom[2]) << 16 | @as(u32, tests.rom[3]);
 
             // Call the run function and run until we've stopped
-            cpu.r(.a, 7).* = std.mem.readInt(u32, tests.rom[0..4], .big) -% (4 * 3);
-            cpu.pc = std.mem.readInt(u32, tests.rom[4..8], .big);
             var timeout: usize = 0;
             while (!cpu.stop) {
                 for (tokens.items) |token| {
@@ -461,9 +417,9 @@ test "m68k integration test" {
 
             // Check the outputs
             std.testing.expectEqualSlices(
-                u8,
+                u16,
                 case.expect,
-                ram.bytes[tests.expect_base..][0..case.expect.len],
+                ram.words[tests.expect_base..][0..case.expect.len],
             ) catch {
                 std.log.err("Test case {} failed in {s}.", .{ i, entry.name });
                 return error.TestFailed;

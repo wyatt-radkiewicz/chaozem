@@ -1,13 +1,13 @@
 //! Each test has this pattern
 
 /// Rom image
-rom: []const u8,
+rom: []const u16,
 
 /// Base ram image
-ram: []const u8,
+ram: []const u16,
 
 /// What the stack should be initialized to
-stack: []const u8,
+stack: []const u16,
 
 /// This is where to start injecting setup bytes to
 setup_base: usize,
@@ -28,8 +28,8 @@ pub const Case = struct {
     name: []const u8,
 
     /// Setup bytes
-    setup: []const u8,
+    setup: []const u16,
 
     /// Check the expected bytes for this
-    expect: []const u8,
+    expect: []const u16,
 };
