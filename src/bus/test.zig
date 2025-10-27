@@ -17,7 +17,7 @@ test "16 bit address and 8 bit data bus" {
     };
     const mapping_a = bus.Mapping(width){
         .start = 0x80,
-        .size = 0x80,
+        .size = 0x7F,
         .end = 0x017F,
     };
     var device_b = bus.Device(width){
@@ -30,7 +30,7 @@ test "16 bit address and 8 bit data bus" {
     };
     const mapping_b = bus.Mapping(width){
         .start = 0x200,
-        .size = 0x10,
+        .size = 0x0F,
     };
     const network = bus.Bus(width).init(&.{ mapping_a, mapping_b }, &.{ &device_a, &device_b });
     try std.testing.expectEqual(null, network.read(0x0000, 0x00));
@@ -60,7 +60,7 @@ test "bus reader" {
     };
     const mapping_a = bus.Mapping(width){
         .start = 0,
-        .size = 8,
+        .size = 7,
         .end = 15,
     };
     const network = bus.Bus(width).init(&.{mapping_a}, &.{&device_a});

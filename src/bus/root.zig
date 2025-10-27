@@ -34,7 +34,7 @@ pub fn Mapping(comptime width: Width) type {
         start: width.Addr(),
 
         /// Size of the memory region before it starts mirroring (minus 1).
-        /// This must be a multiple of two otherwise mirroring won't work.
+        /// The size plus one must be a multiple of two otherwise mirroring won't work.
         size: width.Addr(),
 
         /// What is the end (inclusive) of this memory region? It will mirror `size` until this end.
@@ -78,7 +78,7 @@ pub fn Bus(comptime width: Width) type {
                 var shift = 0;
                 while (shift + 1 < width.addr and for (map) |mapping| {
                     const mask = @as(width.Addr(), 2 << shift) - 1;
-                    const end = mapping.end orelse mapping.start +% mapping.size -% 1;
+                    const end = mapping.end orelse mapping.start +% mapping.size;
                     if (mapping.start & mask != 0 or end & mask != mask) {
                         break false;
                     }
@@ -115,7 +115,7 @@ pub fn Bus(comptime width: Width) type {
                     const addr = @as(width.Addr(), shifted) << shift;
                     return for (map, 0..) |mapping, mapping_idx| {
                         if (addr >= mapping.start and addr <= mapping.end orelse
-                            mapping.start +% mapping.size -% 1)
+                            mapping.start +% mapping.size)
                         {
                             break mapping_idx;
                         }
@@ -141,7 +141,7 @@ pub fn Bus(comptime width: Width) type {
             const index = this.map(addr) orelse return null;
             const rd = this.devices[index].read orelse return null;
             const mapping = this.mappings[index];
-            return rd(this.devices[index], (addr - mapping.start) & (mapping.size - 1), mask);
+            return rd(this.devices[index], (addr - mapping.start) & mapping.size, mask);
         }
 
         /// Write some data to the bus
@@ -149,7 +149,7 @@ pub fn Bus(comptime width: Width) type {
             const index = this.map(addr) orelse return;
             const wr = this.devices[index].write orelse return;
             const mapping = this.mappings[index];
-            wr(this.devices[index], (addr - mapping.start) & (mapping.size - 1), mask, data);
+            wr(this.devices[index], (addr - mapping.start) & mapping.size, mask, data);
         }
 
         /// Get a reader interface starting reading at `addr` spot.

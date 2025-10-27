@@ -36,11 +36,11 @@ const Test = struct {
         var bus = Bus.init(&.{
             Mapping{
                 .start = 0,
-                .size = rom_buffer.len,
+                .size = rom_buffer.len - 1,
             },
             Mapping{
                 .start = rom_buffer.len,
-                .size = ram_buffer.len,
+                .size = ram_buffer.len - 1,
                 .end = std.math.maxInt(m68k.bus_width.Addr()),
             },
         }, &.{ &rom.device, &ram.device });
