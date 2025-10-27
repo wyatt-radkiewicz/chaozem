@@ -1,4 +1,7 @@
 const std = @import("std");
+const Writer = std.io.Writer;
+const Reader = std.io.Reader;
+const WriteError = std.io.Writer.Error;
 
 const int = @import("int");
 
@@ -25,15 +28,8 @@ pub fn DataReg(n: u4) type {
             ctx.cpu.d[this.n] = int.overwrite(ctx.cpu.d[this.n], @as(Int, @bitCast(data)));
         }
 
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{f}", .{Reg.d.fmt(int.extract(u3, this.opcode, n))});
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, _: *Reader, opcode: u16) WriteError!void {
+            try wr.print("{f}", .{Reg.d.fmt(int.extract(u3, opcode, n))});
         }
     };
 }
@@ -55,15 +51,8 @@ pub fn AddrReg(n: u4) type {
             ctx.cpu.r(.a, this.n).* = data;
         }
 
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{f}", .{Reg.a.fmt(int.extract(u3, this.opcode, n))});
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, _: *Reader, opcode: u16) WriteError!void {
+            try wr.print("{f}", .{Reg.a.fmt(int.extract(u3, opcode, n))});
         }
     };
 }
@@ -87,15 +76,8 @@ pub fn PostInc(n: u4) type {
             ctx.write(size.Int(), ctx.cpu.r(.a, this.n).*, data);
         }
 
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("({f})+", .{Reg.a.fmt(int.extract(u3, this.opcode, n))});
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, _: *Reader, opcode: u16) WriteError!void {
+            try wr.print("({f})+", .{Reg.a.fmt(int.extract(u3, opcode, n))});
         }
     };
 }
@@ -119,19 +101,12 @@ pub const Status = struct {
         ctx.cpu.sr = @bitCast(int.overwrite(bits, data));
     }
 
-    pub fn Disasm(comptime size: Size) type {
-        return struct {
-            reader: *std.io.Reader,
-            opcode: u16,
-
-            pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                try writer.print("{s}", .{switch (size) {
-                    .b => "ccr",
-                    .w => "sr",
-                    else => @compileError("Expected byte or word with status register disasm!"),
-                }});
-            }
-        };
+    pub fn disasm(comptime size: Size, wr: *Writer, _: *Reader, _: u16) WriteError!void {
+        try wr.print("{s}", .{switch (size) {
+            .b => "ccr",
+            .w => "sr",
+            else => @compileError("Expected byte or word with status register disasm!"),
+        }});
     }
 };
 
@@ -149,15 +124,8 @@ pub const Usp = struct {
         ctx.cpu.sp[0] = data;
     }
 
-    pub fn Disasm(comptime _: Size) type {
-        return struct {
-            reader: *std.io.Reader,
-            opcode: u16,
-
-            pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                try writer.print("usp", .{});
-            }
-        };
+    pub fn disasm(comptime _: Size, wr: *Writer, _: *Reader, _: u16) WriteError!void {
+        try wr.print("usp", .{});
     }
 };
 
@@ -172,26 +140,17 @@ pub fn Imm(comptime fmt: FormatOptions) type {
             return ctx.fetch(size.Int());
         }
 
-        pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: void) void {}
-
-        pub fn Disasm(comptime size: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    const Data = std.meta.Int(if (fmt.hex) .unsigned else .signed, size.bits());
-                    const val: size.Int() = @truncate(switch (size) {
-                        else => unreachable,
-                        .b, .w => this.reader.takeInt(u16, .big) catch return error.WriteFailed,
-                        .l => this.reader.takeInt(u32, .big) catch return error.WriteFailed,
-                    });
-                    try writer.print("{f}", .{Formatter(Data){
-                        .val = @bitCast(val),
-                        .options = fmt,
-                    }});
-                }
-            };
+        pub fn disasm(comptime size: Size, wr: *Writer, rd: *Reader, _: u16) WriteError!void {
+            const Data = std.meta.Int(if (fmt.hex) .unsigned else .signed, size.bits());
+            const val: size.Int() = @truncate(switch (size) {
+                else => unreachable,
+                .b, .w => rd.takeInt(u16, .big) catch return error.WriteFailed,
+                .l => rd.takeInt(u32, .big) catch return error.WriteFailed,
+            });
+            try wr.print("{f}", .{Formatter(Data){
+                .val = @bitCast(val),
+                .options = fmt,
+            }});
         }
     };
 }
@@ -206,20 +165,11 @@ pub const BitIdx = struct {
         return ctx.fetch(std.math.Log2Int(size.Int()));
     }
 
-    pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: void) void {}
-
-    pub fn Disasm(comptime size: Size) type {
-        return struct {
-            reader: *std.io.Reader,
-            opcode: u16,
-
-            pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                try writer.print("#{}", .{@as(
-                    std.math.Log2Int(size.Int()),
-                    @truncate(this.reader.takeInt(u16, .big) catch return error.WriteFailed),
-                )});
-            }
-        };
+    pub fn disasm(comptime size: Size, wr: *Writer, rd: *Reader, _: u16) WriteError!void {
+        try wr.print("#{}", .{@as(
+            std.math.Log2Int(size.Int()),
+            @truncate(rd.takeInt(u16, .big) catch return error.WriteFailed),
+        )});
     }
 };
 
@@ -243,15 +193,8 @@ pub fn RegIdx(comptime reg_type: Reg, at: u4) type {
             }
         }
 
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{f}", .{reg_type.fmt(int.extract(u3, this.opcode, at))});
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, _: *Reader, opcode: u16) WriteError!void {
+            try wr.print("{f}", .{reg_type.fmt(int.extract(u3, opcode, at))});
         }
     };
 }
@@ -267,20 +210,11 @@ pub fn Opcode(Data: type, at: u4) type {
             return int.extract(Data, opcode, at);
         }
 
-        pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: void) void {}
-
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{f}", .{Formatter(Data){
-                        .val = int.extract(Data, this.opcode, at),
-                        .options = .{ .hex = false },
-                    }});
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, _: *Reader, opcode: u16) WriteError!void {
+            try wr.print("{f}", .{Formatter(Data){
+                .val = int.extract(Data, opcode, at),
+                .options = .{ .hex = false },
+            }});
         }
     };
 }
@@ -296,20 +230,11 @@ pub fn Const(Type: type, val: Type) type {
             return val;
         }
 
-        pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: void) void {}
-
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(_: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    try writer.print("{f}", .{Formatter(Type){
-                        .val = val,
-                        .options = .{ .hex = false },
-                    }});
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, _: *Reader, _: u16) WriteError!void {
+            try wr.print("{f}", .{Formatter(Type){
+                .val = val,
+                .options = .{ .hex = false },
+            }});
         }
     };
 }
@@ -356,19 +281,12 @@ pub fn RegReg(comptime m: u4, comptime n: u4, comptime delay: RegRegDelay) type 
             }
         }
 
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    const reg = int.extract(u3, this.opcode, n);
-                    switch (int.extract(Cpu.Reg, this.opcode, m)) {
-                        .d => try writer.print("{f}", .{Reg.d.fmt(reg)}),
-                        .a => try writer.print("-({f})", .{Reg.a.fmt(reg)}),
-                    }
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, _: *Reader, opcode: u16) WriteError!void {
+            const reg = int.extract(u3, opcode, n);
+            switch (int.extract(Cpu.Reg, opcode, m)) {
+                .d => try wr.print("{f}", .{Reg.d.fmt(reg)}),
+                .a => try wr.print("-({f})", .{Reg.a.fmt(reg)}),
+            }
         }
     };
 }
@@ -418,20 +336,13 @@ pub fn Ea(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
             }
         }
 
-        pub fn Disasm(comptime size: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    const reg = int.extract(u3, this.opcode, n);
-                    try writer.print("{f}", .{Ctx.Mode.Disasm(size){
-                        .reader = this.reader,
-                        .mode = Ctx.Mode.decode(int.extract(u3, this.opcode, m), reg),
-                        .reg = reg,
-                    }});
-                }
-            };
+        pub fn disasm(comptime size: Size, wr: *Writer, rd: *Reader, opcode: u16) WriteError!void {
+            const reg = int.extract(u3, opcode, n);
+            try wr.print("{f}", .{Ctx.Mode.Disasm(size){
+                .reader = rd,
+                .mode = Ctx.Mode.decode(int.extract(u3, opcode, m), reg),
+                .reg = reg,
+            }});
         }
     };
 }
@@ -450,22 +361,13 @@ pub fn Addr(comptime m: u4, comptime n: u4, comptime delay: EaDelay) type {
             return mode.calc(ctx, .none, reg);
         }
 
-        pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: void) void {}
-
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    const reg = int.extract(u3, this.opcode, n);
-                    try writer.print("{f}", .{Ctx.Mode.Disasm(.none){
-                        .reader = this.reader,
-                        .mode = Ctx.Mode.decode(int.extract(u3, this.opcode, m), reg),
-                        .reg = reg,
-                    }});
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, rd: *Reader, opcode: u16) WriteError!void {
+            const reg = int.extract(u3, opcode, n);
+            try wr.print("{f}", .{Ctx.Mode.Disasm(.none){
+                .reader = rd,
+                .mode = Ctx.Mode.decode(int.extract(u3, opcode, m), reg),
+                .reg = reg,
+            }});
         }
     };
 }
@@ -511,44 +413,37 @@ pub fn Multiple(
 
         pub fn store(_: @This(), _: *Ctx, comptime _: Size, _: u16, _: u32) void {}
 
-        pub fn Disasm(comptime size: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
+        pub fn disasm(comptime size: Size, wr: *Writer, rd: *Reader, opcode: u16) WriteError!void {
+            // "movem" is wierd in that the move mask always is the first, even if
+            // the move destination is the mask so we create a sub reader for this
+            const bytes = rd.peekArray(4) catch return error.WriteFailed;
+            var reader = std.io.Reader.fixed(bytes);
 
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    // "movem" is wierd in that the move mask always is the first, even if
-                    // the move destination is the mask so we create a sub reader for this
-                    const bytes = this.reader.peekArray(4) catch return error.WriteFailed;
-                    var reader = std.io.Reader.fixed(bytes);
+            // Get the things we can get from the opcode
+            const reg = int.extract(u3, opcode, addr_n);
+            const mode = Ctx.Mode.decode(int.extract(u3, opcode, addr_m), reg);
 
-                    // Get the things we can get from the opcode
-                    const reg = int.extract(u3, this.opcode, addr_n);
-                    const mode = Ctx.Mode.decode(int.extract(u3, this.opcode, addr_m), reg);
-
-                    // Decode and disassemble
-                    switch (op) {
-                        .load, .store => {
-                            const word = reader.takeInt(u16, .big) catch unreachable;
-                            try writer.print("{f}", .{Ctx.RegMask.Disasm{
-                                .reader = this.reader,
-                                .mask = @bitCast(switch (mode) {
-                                    .pre_dec => @bitReverse(word),
-                                    else => word,
-                                }),
-                            }});
-                        },
-                        else => {
-                            _ = reader.discard(.limited(2)) catch unreachable;
-                            try writer.print("{f}", .{Ctx.Mode.Disasm(size){
-                                .reader = &reader,
-                                .mode = mode,
-                                .reg = reg,
-                            }});
-                        },
-                    }
-                }
-            };
+            // Decode and disassemble
+            switch (op) {
+                .load, .store => {
+                    const word = reader.takeInt(u16, .big) catch unreachable;
+                    try wr.print("{f}", .{Ctx.RegMask.Disasm{
+                        .reader = rd,
+                        .mask = @bitCast(switch (mode) {
+                            .pre_dec => @bitReverse(word),
+                            else => word,
+                        }),
+                    }});
+                },
+                else => {
+                    _ = reader.discard(.limited(2)) catch unreachable;
+                    try wr.print("{f}", .{Ctx.Mode.Disasm(size){
+                        .reader = &reader,
+                        .mode = mode,
+                        .reg = reg,
+                    }});
+                },
+            }
         }
     };
 }
@@ -584,17 +479,10 @@ pub fn Peripheral(comptime addr_n: u4) type {
             }
         }
 
-        pub fn Disasm(comptime _: Size) type {
-            return struct {
-                reader: *std.io.Reader,
-                opcode: u16,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    const reg = int.extract(u3, this.opcode, addr_n);
-                    const disp = this.reader.takeInt(i16, .big) catch return error.WriteFailed;
-                    try writer.print("(#{},a{})", .{ disp, reg });
-                }
-            };
+        pub fn disasm(comptime _: Size, wr: *Writer, rd: *Reader, opcode: u16) WriteError!void {
+            const reg = int.extract(u3, opcode, addr_n);
+            const disp = rd.takeInt(i16, .big) catch return error.WriteFailed;
+            try wr.print("(#{},a{})", .{ disp, reg });
         }
     };
 }

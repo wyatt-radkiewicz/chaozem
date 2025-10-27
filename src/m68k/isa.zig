@@ -130,11 +130,7 @@ pub const Instr = struct {
                         opcode: u16,
                     ) std.io.Writer.Error!void {
                         inline for (comptime instr.disasm orelse Token.default(instr)) |token| {
-                            try writer.print("{f}", .{Token.Disasm(instr, size){
-                                .token = token,
-                                .reader = reader,
-                                .opcode = opcode,
-                            }});
+                            try token.disasm(instr, size, writer, reader, opcode);
                         }
                     }
                 }.disasm,
@@ -166,45 +162,35 @@ pub const Instr = struct {
         }
 
         /// Disassemble a token
-        fn Disasm(comptime instr: Instr, comptime size: Ctx.Size) type {
-            return struct {
-                token: Token,
-                opcode: u16,
-                reader: *std.io.Reader,
-
-                pub fn format(this: @This(), writer: *std.io.Writer) std.io.Writer.Error!void {
-                    switch (this.token) {
-                        .space => try writer.print(" ", .{}),
-                        .comma => try writer.print(",", .{}),
-                        .src => {
-                            const Src = instr.src orelse unreachable;
-                            try writer.print("{f}", .{Src.Disasm(size){
-                                .reader = this.reader,
-                                .opcode = this.opcode,
-                            }});
-                        },
-                        .dst => {
-                            const Dst = instr.dst orelse unreachable;
-                            try writer.print("{f}", .{Dst.Disasm(size){
-                                .reader = this.reader,
-                                .opcode = this.opcode,
-                            }});
-                        },
-                        .ctx => {
-                            const Opnd = instr.ctx orelse unreachable;
-                            try writer.print("{f}", .{Opnd.Disasm(size){
-                                .reader = this.reader,
-                                .opcode = this.opcode,
-                            }});
-                        },
-                        .size => switch (size) {
-                            .none => {},
-                            else => try writer.print(".{s}", .{@tagName(size)}),
-                        },
-                        .name => try writer.print("{s}", .{instr.name}),
-                    }
-                }
-            };
+        fn disasm(
+            comptime this: @This(),
+            comptime instr: Instr,
+            comptime size: Ctx.Size,
+            writer: *std.io.Writer,
+            reader: *std.io.Reader,
+            opcode: u16,
+        ) std.io.Writer.Error!void {
+            switch (this) {
+                .space => try writer.print(" ", .{}),
+                .comma => try writer.print(",", .{}),
+                .src => {
+                    const Src = instr.src orelse unreachable;
+                    try Src.disasm(size, writer, reader, opcode);
+                },
+                .dst => {
+                    const Dst = instr.dst orelse unreachable;
+                    try Dst.disasm(size, writer, reader, opcode);
+                },
+                .ctx => {
+                    const Opnd = instr.ctx orelse unreachable;
+                    try Opnd.disasm(size, writer, reader, opcode);
+                },
+                .size => switch (size) {
+                    .none => {},
+                    else => try writer.print(".{s}", .{@tagName(size)}),
+                },
+                .name => try writer.print("{s}", .{instr.name}),
+            }
         }
     };
 };
