@@ -11,22 +11,19 @@ pub const Bus = bus_interface.Bus(bus_width);
 /// Used when creating prefixes for instructions
 pub const Prefix = packed struct {
     /// The bytes that make up the instruction
-    bytes: Int = 0,
+    bytes: [max_len]u8 = [1]u8{0x00} ** max_len,
 
-    /// Gets opcode byte n
-    pub fn opcode(this: @This(), n: std.math.IntFittingRange(0, max_len - 1)) u8 {
-        return @truncate(this.bytes >> @as(std.math.Log2Int(Int), n * 8));
-    }
+    /// How many bytes are in this prefix
+    len: u32 = 0,
 
-    /// Adds a new byte to the start of the prefix
+    /// Adds a new byte to the end of the prefix
     pub fn push(this: *@This(), byte: u8) void {
-        this.bytes <<= 8;
-        this.bytes |= byte;
+        this.bytes[this.len] = byte;
+        this.len += 1;
     }
 
     /// Maximum length of a instruction prefix
-    pub const max_len = 8;
-    pub const Int = std.meta.Int(.unsigned, max_len * 8);
+    pub const max_len = 4;
 };
 
 /// Generate a 256 entry decoder given a list of decoders, solves collisions with priority
