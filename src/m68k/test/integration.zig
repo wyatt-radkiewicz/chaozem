@@ -67,10 +67,10 @@ const Token = union(enum) {
                     for (range[0]..range[1]) |addr| {
                         try writer.print(
                             "0x{x:0>4},",
-                            .{this.bus.read(@truncate(addr), 0b11) orelse 0},
+                            .{this.bus.read(@truncate(addr), 0b11)},
                         );
                     }
-                    try writer.print("0x{x:0>4}", .{this.bus.read(range[1], 0b11) orelse 0});
+                    try writer.print("0x{x:0>4}", .{this.bus.read(range[1], 0b11)});
                     if (std.math.sub(u23, 11, (range[1] - range[0]) * 7)) |n| {
                         _ = try writer.splatByte(' ', n);
                     } else |_| {}
@@ -84,10 +84,10 @@ const Token = union(enum) {
                     for (start..end) |addr| {
                         try writer.print(
                             "0x{x:0>4},",
-                            .{this.bus.read(@truncate(addr), 0b11) orelse 0},
+                            .{this.bus.read(@truncate(addr), 0b11)},
                         );
                     }
-                    try writer.print("0x{x:0>4}", .{this.bus.read(end, 0b11) orelse 0});
+                    try writer.print("0x{x:0>4}", .{this.bus.read(end, 0b11)});
                 },
             }
         }
@@ -359,7 +359,7 @@ test "m68k integration test" {
         var ram = rxm.Rxm(.rw, m68k.bus_width).init(&ram_buffer);
 
         // Create bus interface
-        var bus = Bus.init(&.{
+        var bus = Bus.init(null, &.{
             Mapping{
                 .start = 0,
                 .size = (0x20000 >> 1) - 1,

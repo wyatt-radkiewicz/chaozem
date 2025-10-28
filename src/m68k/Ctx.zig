@@ -414,17 +414,17 @@ pub inline fn read(this: *Ctx, comptime Data: type, addr: u32) Data {
         8 => {
             this.clk += 4;
             const byte: u1 = @truncate(~addr);
-            const word = this.bus.read(@truncate(addr >> 1), @as(u2, 1) << byte) orelse 0;
+            const word = this.bus.read(@truncate(addr >> 1), @as(u2, 1) << byte);
             return @bitCast(@as(u8, @truncate(word >> @as(u4, byte) * 8)));
         },
         16 => {
             this.clk += 4;
-            return @bitCast(this.bus.read(@truncate(addr >> 1), 0b11) orelse 0);
+            return @bitCast(this.bus.read(@truncate(addr >> 1), 0b11));
         },
         32 => {
             this.clk += 8;
-            return @bitCast(@as(u32, this.bus.read(@truncate(addr >> 1), 0b11) orelse 0) << 16 |
-                @as(u32, this.bus.read(@truncate((addr >> 1) + 1), 0b11) orelse 0));
+            return @bitCast(@as(u32, this.bus.read(@truncate(addr >> 1), 0b11)) << 16 |
+                @as(u32, this.bus.read(@truncate((addr >> 1) + 1), 0b11)));
         },
         else => @compileError(std.fmt.comptimePrint(
             "Tried to read data of width {}!",

@@ -9,11 +9,10 @@ test "16 bit address and 8 bit data bus" {
     };
     var device_a = bus.Device(width){
         .read = struct {
-            pub fn read(_: *bus.Device(width), addr: u16, _: u1) ?u8 {
+            pub fn read(_: *bus.Device(width), addr: u16, _: u1) u8 {
                 return @truncate(addr);
             }
         }.read,
-        .write = null,
     };
     const mapping_a = bus.Mapping(width){
         .start = 0x80,
@@ -22,26 +21,34 @@ test "16 bit address and 8 bit data bus" {
     };
     var device_b = bus.Device(width){
         .read = struct {
-            pub fn read(_: *bus.Device(width), _: u16, mask: u1) ?u8 {
+            pub fn read(_: *bus.Device(width), _: u16, mask: u1) u8 {
                 return mask;
             }
         }.read,
-        .write = null,
     };
     const mapping_b = bus.Mapping(width){
         .start = 0x200,
         .size = 0x0F,
     };
-    const network = bus.Bus(width).init(&.{ mapping_a, mapping_b }, &.{ &device_a, &device_b });
-    try std.testing.expectEqual(null, network.read(0x0000, 0x00));
+    var open_bus = bus.Device(width){ .read = struct {
+        pub fn read(_: *bus.Device(width), _: width.Addr(), _: width.Mask()) width.Data() {
+            return 0xA5;
+        }
+    }.read };
+    const network = bus.Bus(width).init(
+        &open_bus,
+        &.{ mapping_a, mapping_b },
+        &.{ &device_a, &device_b },
+    );
+    try std.testing.expectEqual(0xA5, network.read(0x0000, 0x00));
     try std.testing.expectEqual(0x00, network.read(0x0080, 0x00));
     try std.testing.expectEqual(0x01, network.read(0x0081, 0x00));
     try std.testing.expectEqual(0x00, network.read(0x0100, 0x00));
     try std.testing.expectEqual(0x01, network.read(0x0101, 0x00));
-    try std.testing.expectEqual(null, network.read(0x0180, 0x00));
+    try std.testing.expectEqual(0xA5, network.read(0x0180, 0x00));
     try std.testing.expectEqual(0b1, network.read(0x0200, 0b1));
     try std.testing.expectEqual(0b0, network.read(0x020F, 0b0));
-    try std.testing.expectEqual(null, network.read(0x0210, 0b1));
+    try std.testing.expectEqual(0xA5, network.read(0x0210, 0b1));
 }
 
 test "bus reader" {
@@ -51,19 +58,18 @@ test "bus reader" {
     };
     var device_a = bus.Device(width){
         .read = struct {
-            pub fn read(_: *bus.Device(width), addr: u4, _: u2) ?u16 {
+            pub fn read(_: *bus.Device(width), addr: u4, _: u2) u16 {
                 const bytes = "hello_world_____";
                 return std.mem.readInt(u16, bytes[addr << 1 ..][0..2], .little);
             }
         }.read,
-        .write = null,
     };
     const mapping_a = bus.Mapping(width){
         .start = 0,
         .size = 7,
         .end = 15,
     };
-    const network = bus.Bus(width).init(&.{mapping_a}, &.{&device_a});
+    const network = bus.Bus(width).init(null, &.{mapping_a}, &.{&device_a});
     var buffer = [1]u8{0} ** 12;
     var reader = network.reader(0, &buffer, .little, 1);
 

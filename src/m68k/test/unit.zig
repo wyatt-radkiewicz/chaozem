@@ -33,7 +33,7 @@ const Test = struct {
         const initial_rom_buffer = rom_buffer;
 
         // Create a bus interface to access the environment
-        var bus = Bus.init(&.{
+        var bus = Bus.init(null, &.{
             Mapping{
                 .start = 0,
                 .size = rom_buffer.len - 1,

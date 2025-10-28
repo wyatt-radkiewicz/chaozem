@@ -50,16 +50,31 @@ pub fn Mapping(comptime width: Width) type {
 pub fn Device(comptime width: Width) type {
     return struct {
         /// This function is used to get data from the device.
-        read: ?*const fn (*@This(), width.Addr(), width.Mask()) ?width.Data() = null,
+        read: *const fn (*This, width.Addr(), width.Mask()) width.Data() = default_read,
 
         /// This function is used to write data to the device.
-        write: ?*const fn (*@This(), width.Addr(), width.Mask(), width.Data()) void = null,
+        write: *const fn (*This, width.Addr(), width.Mask(), width.Data()) void = default_write,
+
+        const This = @This();
+
+        /// Default behavior is to return 0.
+        pub const default_read = &struct {
+            pub fn read(_: *This, _: width.Addr(), _: width.Mask()) width.Data() {
+                return 0;
+            }
+        }.read;
+
+        /// Default behavior is to do nothing.
+        pub const default_write = &struct {
+            pub fn write(_: *This, _: width.Addr(), _: width.Mask(), _: width.Data()) void {}
+        }.write;
     };
 }
 
 /// This is the bus network and also interface for the bus
 pub fn Bus(comptime width: Width) type {
     return struct {
+        open_bus: *Device(width),
         devices: []const *Device(width),
         mappings: []const Mapping(width),
         shift: std.math.Log2Int(width.Addr()),
@@ -70,7 +85,16 @@ pub fn Bus(comptime width: Width) type {
         /// Initialize a new bus network with the following mapping and devices. A mapping must be
         /// specified at compile time to create a fast look up table. Device interfaces are provided
         /// at runtime and correspond with the mappings provided.
-        pub fn init(comptime map: []const Mapping(width), devices: []const *Device(width)) This {
+        /// If no open bus handler is defined, one that reads 0 and writes nothing is used.
+        /// The open bus handler is always used with absolute bus addresses.
+        pub fn init(
+            open_bus: ?*Device(width),
+            comptime map: []const Mapping(width),
+            devices: []const *Device(width),
+        ) This {
+            // Get the real open bus implementation
+            const open_bus_ptr = open_bus orelse @constCast(&Device(width){});
+
             // Since these are memory mapped addresses, chances are that they maps don't fall
             // exactly on single address boundaries. We can greatly reduce the size of the look up
             // table by finding a greatest common denominator between the addresses in log 2.
@@ -90,6 +114,7 @@ pub fn Bus(comptime width: Width) type {
             // should just return a constant look up
             if (shift == width.addr) {
                 return .{
+                    .open_bus = open_bus_ptr,
                     .devices = devices,
                     .mappings = map,
                     .shift = 0,
@@ -125,6 +150,7 @@ pub fn Bus(comptime width: Width) type {
 
             // If we did no shift, then just use the mapFn provided, else use a wrapper function
             return .{
+                .open_bus = open_bus_ptr,
                 .devices = devices,
                 .mappings = map,
                 .shift = shift,
@@ -137,19 +163,22 @@ pub fn Bus(comptime width: Width) type {
         }
 
         /// Read some data from the bus
-        pub fn read(this: This, addr: width.Addr(), mask: width.Mask()) ?width.Data() {
-            const index = this.map(addr) orelse return null;
-            const rd = this.devices[index].read orelse return null;
-            const mapping = this.mappings[index];
-            return rd(this.devices[index], (addr - mapping.start) & mapping.size, mask);
+        pub fn read(this: This, addr: width.Addr(), mask: width.Mask()) width.Data() {
+            const idx = this.map(addr) orelse return this.open_bus.read(this.open_bus, addr, mask);
+            const rd = this.devices[idx].read;
+            const mapping = this.mappings[idx];
+            return rd(this.devices[idx], (addr - mapping.start) & mapping.size, mask);
         }
 
         /// Write some data to the bus
         pub fn write(this: This, addr: width.Addr(), mask: width.Mask(), data: width.Data()) void {
-            const index = this.map(addr) orelse return;
-            const wr = this.devices[index].write orelse return;
-            const mapping = this.mappings[index];
-            wr(this.devices[index], (addr - mapping.start) & mapping.size, mask, data);
+            const idx = this.map(addr) orelse {
+                this.open_bus.write(this.open_bus, addr, mask, data);
+                return;
+            };
+            const wr = this.devices[idx].write;
+            const mapping = this.mappings[idx];
+            wr(this.devices[idx], (addr - mapping.start) & mapping.size, mask, data);
         }
 
         /// Get a reader interface starting reading at `addr` spot.
@@ -200,7 +229,7 @@ pub fn Bus(comptime width: Width) type {
                 std.debug.assert(dest.len % size == 0);
 
                 for (0..dest.len / size) |i| {
-                    const data = this.bus.read(this.addr, std.math.maxInt(width.Mask())) orelse 0;
+                    const data = this.bus.read(this.addr, std.math.maxInt(width.Mask()));
                     std.mem.writeInt(width.Data(), dest[i * size ..][0..size], data, this.endian);
                     this.addr +%= this.step;
                 }

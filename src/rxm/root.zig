@@ -48,16 +48,17 @@ pub fn Rxm(comptime rxm: Type, comptime width: Width) type {
             return .{
                 .words = buffer,
                 .device = .{ .read = read, .write = switch (rxm) {
-                    .ro => null,
+                    .ro => Device.default_write,
                     .rw => write,
                 } },
             };
         }
 
         /// Read implementation
-        pub fn read(device: *Device, addr: Addr, _: Mask) ?Data {
+        /// Returns 0 if data was read out of bounds
+        pub fn read(device: *Device, addr: Addr, _: Mask) Data {
             const this: *@This() = @fieldParentPtr("device", device);
-            return if (addr < this.words.len) this.words[addr] else null;
+            return if (addr < this.words.len) this.words[addr] else 0;
         }
 
         /// Write implementation
